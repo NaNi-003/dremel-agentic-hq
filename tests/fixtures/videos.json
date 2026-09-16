@@ -1,0 +1,12 @@
+[
+  {
+    "video_id": "fixture-restore-table",
+    "title": "Restoring a table",
+    "description": "A careful furniture restoration.",
+    "publish_date": "2026-09-06T00:00:00Z",
+    "views": 1000,
+    "comments": 10,
+    "thumbnail_url": "https://example.invalid/table.jpg",
+    "transcript": "I restored the table."
+  }
+]

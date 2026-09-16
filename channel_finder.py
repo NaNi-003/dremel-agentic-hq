@@ -3,15 +3,15 @@ from dotenv import load_dotenv
 from googleapiclient.discovery import build
 import pandas as pd
 
-load_dotenv()
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+def create_youtube_client(api_key=None):
+    """Create a YouTube client only when collection is requested."""
+    load_dotenv()
+    resolved_key = api_key or os.getenv("YOUTUBE_API_KEY")
+    if not resolved_key:
+        raise ValueError("Missing YouTube API Key.")
+    return build("youtube", "v3", developerKey=resolved_key)
 
-if not YOUTUBE_API_KEY:
-    raise ValueError("Missing YouTube API Key.")
-
-youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
-
-def discover_uk_diy_channels(keywords, max_results=5):
+def discover_uk_diy_channels(keywords, max_results=5, youtube_client=None):
     """
     Searches YouTube for specific keywords, filtering by region (UK)
     and returning a list of automated Channel IDs.
@@ -19,6 +19,7 @@ def discover_uk_diy_channels(keywords, max_results=5):
     print(f"Hunting for channels using keywords: '{keywords}'...")
     
     # Execute the Search API Call
+    youtube = youtube_client or create_youtube_client()
     search_response = youtube.search().list(
         q=keywords,
         part="snippet",

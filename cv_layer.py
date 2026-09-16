@@ -3,12 +3,23 @@ import requests
 from colorthief import ColorThief
 import pandas as pd
 
-try:
-    from deepface import DeepFace
-    _HAS_DEEPFACE = True
-except Exception:
-    DeepFace = None
-    _HAS_DEEPFACE = False
+
+_DEEPFACE = None
+_DEEPFACE_IMPORT_ATTEMPTED = False
+
+
+def _get_deepface():
+    """Load the optional DeepFace stack only when thumbnail analysis needs it."""
+    global _DEEPFACE, _DEEPFACE_IMPORT_ATTEMPTED
+    if not _DEEPFACE_IMPORT_ATTEMPTED:
+        _DEEPFACE_IMPORT_ATTEMPTED = True
+        try:
+            from deepface import DeepFace
+        except Exception:
+            _DEEPFACE = None
+        else:
+            _DEEPFACE = DeepFace
+    return _DEEPFACE
 
 def download_image(url, filename):
     response = requests.get(url, timeout=15)
@@ -37,9 +48,10 @@ def _heuristic_emotion_from_color(rgb):
 
 def _analyze_thumbnail(img_path, dominant_rgb):
     dom_color = rgb_to_hex(dominant_rgb)
+    deepface = _get_deepface()
 
-    if _HAS_DEEPFACE:
-        face_analysis = DeepFace.analyze(img_path, actions=['emotion'], enforce_detection=False)
+    if deepface is not None:
+        face_analysis = deepface.analyze(img_path, actions=['emotion'], enforce_detection=False)
         if isinstance(face_analysis, list):
             emotion = face_analysis[0].get('dominant_emotion', 'No Face Detected').capitalize()
         else:

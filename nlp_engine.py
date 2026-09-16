@@ -139,13 +139,13 @@ def _resolve_actions_for_video(video):
 
     return extract_loose_actions(fallback_corpus)
 
-def process_and_score_data(video_data_list):
+def process_and_score_data(video_data_list, now=None):
     output_columns = [
         "video_id", "video_title", "thumbnail_url", "detected_verb", 
         "detected_material", "action_pair", "velocity_score"
     ]
     rows = []
-    today = datetime.now(timezone.utc)
+    today = now or datetime.now(timezone.utc)
 
     for video in video_data_list:
         if not isinstance(video, dict): continue

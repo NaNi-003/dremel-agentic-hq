@@ -4,20 +4,22 @@ from googleapiclient.discovery import build
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import TextFormatter
 
-# Securely load environment variables
-load_dotenv()
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
-
-if not YOUTUBE_API_KEY:
-    raise ValueError("Missing YouTube API Key. Check your .env file.")
-
-youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 transcript_api = YouTubeTranscriptApi()
 
-def get_channel_videos(channel_id, max_results=5):
+def create_youtube_client(api_key=None):
+    """Create a YouTube client only when collection is requested."""
+    load_dotenv()
+    resolved_key = api_key or os.getenv("YOUTUBE_API_KEY")
+    if not resolved_key:
+        raise ValueError("Missing YouTube API Key. Check your .env file.")
+    return build("youtube", "v3", developerKey=resolved_key)
+
+
+def get_channel_videos(channel_id, max_results=5, youtube_client=None):
     """Fetches video IDs, metrics, and thumbnail URLs."""
     print(f"Scraping Channel ID: {channel_id}...")
     
+    youtube = youtube_client or create_youtube_client()
     channel_response = youtube.channels().list(part="contentDetails", id=channel_id).execute()
     if not channel_response.get('items'):
         # Treat missing items as an API/channel error

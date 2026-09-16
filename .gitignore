@@ -3,6 +3,8 @@ dremel_final_output.csv
 temp_*.jpg
 __pycache__/
 *.pyc
+.pytest_cache/
+artifacts/
 .venv/
 venv/
 env/
