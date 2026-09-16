@@ -1,0 +1,9 @@
+.env
+dremel_final_output.csv
+temp_*.jpg
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.qodo/

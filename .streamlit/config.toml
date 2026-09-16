@@ -1,0 +1,10 @@
+[theme]
+# Dremel Corporate Blue
+primaryColor = "#005b9f"
+# Very light grey for the main dashboard canvas to make white cards pop
+backgroundColor = "#f4f6f9"
+# Pure white for the sidebar
+secondaryBackgroundColor = "#ffffff"
+# Dark slate for highly readable text
+textColor = "#1e2130"
+font = "sans serif"
