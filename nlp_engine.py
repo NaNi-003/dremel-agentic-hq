@@ -129,15 +129,15 @@ def _build_result_rows(video, actions, velocity):
 def _resolve_actions_for_video(video):
     transcript_text, fallback_corpus = _build_fallback_corpus(video)
     if not transcript_text and not fallback_corpus:
-        return []
+        return [], "unavailable"
 
     if transcript_text:
         actions = extract_dremel_actions(transcript_text)
         if actions or not fallback_corpus:
-            return actions
-        return extract_loose_actions(fallback_corpus)
+            return actions, "transcript"
+        return extract_loose_actions(fallback_corpus), "metadata"
 
-    return extract_loose_actions(fallback_corpus)
+    return extract_loose_actions(fallback_corpus), "metadata"
 
 def process_and_score_data(video_data_list, now=None):
     output_columns = [
@@ -145,13 +145,15 @@ def process_and_score_data(video_data_list, now=None):
         "detected_material", "action_pair", "velocity_score"
     ]
     rows = []
+    extraction_sources = {}
     today = now or datetime.now(timezone.utc)
 
     for video in video_data_list:
         if not isinstance(video, dict): continue
         
-        actions = _resolve_actions_for_video(video)
+        actions, extraction_source = _resolve_actions_for_video(video)
         if not actions: continue
+        extraction_sources[video.get("video_id")] = extraction_source
 
         publish_str = video.get("publish_date")
         if not publish_str: continue
@@ -183,4 +185,5 @@ def process_and_score_data(video_data_list, now=None):
     if not df.empty:
         # Rank by the new, time-penalized velocity score
         df = df.sort_values(by="velocity_score", ascending=False)
+    df.attrs["extraction_sources"] = extraction_sources
     return df

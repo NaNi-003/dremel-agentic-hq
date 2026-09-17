@@ -1,13 +1,20 @@
 import streamlit as st
 import pandas as pd
 import os
+from pathlib import Path
 import altair as alt
 from dotenv import load_dotenv
 from google import genai 
+import dashboard_evidence
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
+LEGACY_OUTPUT = PROJECT_ROOT / "dremel_final_output.csv"
 
 # Load secure keys
-load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+load_dotenv(PROJECT_ROOT / ".env")
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
 
 # 1. Page Configuration
 st.set_page_config(page_title="Dremel Trend Engine", page_icon="⚙️", layout="wide")
@@ -76,14 +83,35 @@ st.markdown("""
 
 # --- PERFORMANCE CACHING ---
 @st.cache_data
-def load_data():
+def load_data(path, file_version):
     try:
-        df = pd.read_csv("dremel_final_output.csv")
-        return df
+        df = pd.read_csv(path)
+        return dashboard_evidence.validate_dashboard_dataframe(df)
     except Exception:
         return pd.DataFrame()
 
-df = load_data()
+def file_version(path):
+    try:
+        stat = os.stat(path)
+        return (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
+
+
+evidence_context = dashboard_evidence.load_latest_evidence(RUNS_ROOT)
+if evidence_context:
+    data_path = evidence_context["dashboard_snapshot"]
+elif dashboard_evidence.latest_pointer_exists(RUNS_ROOT):
+    st.error(
+        "The latest evidence bundle failed validation. "
+        "The dashboard stopped rather than falling back to mutable legacy data."
+    )
+    st.stop()
+else:
+    data_path = LEGACY_OUTPUT
+df = load_data(str(data_path), file_version(data_path))
+if evidence_context and "video_id" in df.columns:
+    df["source_url"] = df["video_id"].map(evidence_context["source_urls"])
 
 if df.empty:
     st.error("Data pipeline empty. Please run main.py to generate the dataset.")
@@ -99,7 +127,7 @@ if "current_trend" not in st.session_state:
 with st.sidebar:
     # Restored Local Image Handling
     try:
-        st.image("dremel_logo.png", use_container_width=True)
+        st.image(str(PROJECT_ROOT / "dremel_logo.png"), width="stretch")
     except Exception:
         st.error("⚠️ dremel_logo.png not found. Please ensure the transparent PNG is saved in the same directory as app.py.")
         
@@ -111,16 +139,39 @@ with st.sidebar:
     selected_trend = st.selectbox("Active Signals:", df['action_pair'].tolist(), label_visibility="collapsed")
     
     st.markdown("**2. Deploy Agentic Brief**")
-    generate_btn = st.button("Generate Strategy")
+    generate_btn = st.button(
+        "Generate Strategy",
+        disabled=client is None,
+        help=(
+            "Add GEMINI_API_KEY to the local .env to enable brief generation."
+            if client is None
+            else None
+        ),
+    )
     
     st.divider()
     st.caption("🟢 Engine Status: ONLINE")
-    st.caption("🧠 LLM Core: Gemini 2.5 Flash")
+    st.caption(
+        "🧠 LLM Core: Gemini 2.5 Flash"
+        if client is not None
+        else "🧠 LLM Core: unavailable (missing local key)"
+    )
     st.caption("📍 Market Target: UK Region")
 
 # --- MAIN STAGE: EXECUTIVE DASHBOARD ---
 st.title("Predictive Trend Engine")
 st.markdown("##### Multimodal Intelligence & Neuromarketing Pipeline")
+if evidence_context:
+    st.caption(
+        f"Evidence collected: {evidence_context['collected_at']} · "
+        f"Run: {evidence_context['run_id']} · "
+        f"Status: {evidence_context['status']}"
+    )
+    if evidence_context["partial_failure_count"]:
+        st.warning(
+            "This dataset is usable but collection was partial. "
+            f"Recorded source-level failures: {evidence_context['partial_failure_count']}."
+        )
 st.write("") 
 
 # KPI Metrics Row
@@ -186,7 +237,8 @@ with tab1:
                 
             except Exception as e:
                 status.update(label="API Connection Failed", state="error")
-                st.error(f"Gemini API Error: {e}")
+                print(f"Gemini API request failed: {type(e).__name__}")
+                st.error("Gemini API request failed. Check the server logs and try again.")
 
     if st.session_state.generated_brief:
         st.success(f"Active Strategy deployed for: {st.session_state.current_trend.title()}")
@@ -210,14 +262,17 @@ with tab2:
         tooltip=['action_pair', 'velocity_score', 'cv_emotion']
     ).interactive().properties(height=400)
 
-    st.altair_chart(scatter_chart, use_container_width=True)
+    st.altair_chart(scatter_chart, width="stretch")
 
 # --- TAB 3: THE RAW DATA ---
 with tab3:
     st.markdown("#### Auditable Intelligence Feed")
     st.caption("Verify the exact thumbnail, NLP action pair, and velocity score for every isolated trend.")
+    evidence_columns = ['thumbnail_url', 'action_pair', 'velocity_score', 'cv_emotion', 'cv_color_hex']
+    if "source_url" in df.columns:
+        evidence_columns.append("source_url")
     st.dataframe(
-        df[['thumbnail_url', 'action_pair', 'velocity_score', 'cv_emotion', 'cv_color_hex']],
+        df[evidence_columns],
         column_config={
             "thumbnail_url": st.column_config.ImageColumn("Visual Context", help="Thumbnail Preview"),
             "action_pair": st.column_config.TextColumn("Detected Action", max_chars=50),
@@ -228,10 +283,11 @@ with tab3:
                 max_value=float(df['velocity_score'].max())
             ),
             "cv_emotion": st.column_config.TextColumn("Emotional Trigger"),
-            "cv_color_hex": st.column_config.TextColumn("Palette")
+            "cv_color_hex": st.column_config.TextColumn("Palette"),
+            "source_url": st.column_config.LinkColumn("Source video")
         },
         hide_index=True,
-        use_container_width=True
+        width="stretch"
     )
     
 # --- TAB 4: THE CAMPAIGN ROI ESTIMATOR ---

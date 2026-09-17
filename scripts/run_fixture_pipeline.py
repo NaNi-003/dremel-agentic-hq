@@ -16,6 +16,7 @@ import nlp_engine  # noqa: E402
 
 FIXTURE_PATH = PROJECT_ROOT / "tests" / "fixtures" / "videos.json"
 DEFAULT_OUTPUT = PROJECT_ROOT / "artifacts" / "fixture" / "dremel_final_output.csv"
+DEFAULT_RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
 FIXED_NOW = datetime(2026, 9, 16, tzinfo=timezone.utc)
 
 
@@ -23,6 +24,7 @@ def fixture_visual_analysis(frame, top_n=10):
     analyzed = frame.head(top_n).copy()
     analyzed["cv_color_hex"] = "#123456"
     analyzed["cv_emotion"] = "Fixture"
+    analyzed["cv_method"] = "fixture"
     return analyzed
 
 
@@ -40,6 +42,7 @@ def main_cli():
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=args.output,
+        runs_root=DEFAULT_RUNS_ROOT,
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: videos,
         process_data_fn=lambda collected: nlp_engine.process_and_score_data(

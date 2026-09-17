@@ -32,3 +32,7 @@ def test_fixture_runner_exercises_pipeline_without_external_credentials(tmp_path
     assert result["status"] == "success"
     assert result["rows_written"] == 1
     assert output_path.exists()
+    candidates = json.loads(
+        Path(result["candidates_path"]).read_text(encoding="utf-8")
+    )
+    assert candidates["candidates"][0]["provenance"]["cv_method"] == "fixture"

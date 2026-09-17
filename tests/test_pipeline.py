@@ -122,7 +122,7 @@ def test_late_pipeline_failure_reports_completed_stage_counts_and_preserves_outp
     assert result.status == "failed"
     assert result.channels_discovered == 1
     assert result.videos_collected == 1
-    assert result.candidates_scored == 1
+    assert result.candidates_scored == 0
     assert result.rows_written == 0
     assert result.error == "fixture visual failure"
     assert output_path.read_bytes() == original

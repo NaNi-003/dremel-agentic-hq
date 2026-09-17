@@ -1,4 +1,6 @@
 import os
+from tempfile import NamedTemporaryFile
+
 import requests
 from colorthief import ColorThief
 import pandas as pd
@@ -56,10 +58,12 @@ def _analyze_thumbnail(img_path, dominant_rgb):
             emotion = face_analysis[0].get('dominant_emotion', 'No Face Detected').capitalize()
         else:
             emotion = face_analysis.get('dominant_emotion', 'No Face Detected').capitalize()
+        method = "deepface_emotion"
     else:
         emotion = _heuristic_emotion_from_color(dominant_rgb)
+        method = "color_heuristic"
 
-    return dom_color, emotion
+    return dom_color, emotion, method
 
 
 def _cleanup_temp_image(img_path):
@@ -76,37 +80,44 @@ def run_visual_analysis(df, top_n=3):
     top_trends = df.head(top_n).copy()
     dominant_colors = []
     dominant_emotions = []
+    cv_methods = []
     
     for index, row in top_trends.iterrows():
-        img_path = f"temp_{row['video_id']}.jpg"
-        # If no thumbnail URL, skip download and use defaults
-        if not row.get('thumbnail_url'):
-            dominant_colors.append('#Unknown')
-            dominant_emotions.append('No Thumbnail')
-            continue
+        with NamedTemporaryFile(suffix=".jpg", delete=False) as temporary_image:
+            img_path = temporary_image.name
+        try:
+            if not row.get('thumbnail_url'):
+                dom_color = '#Unknown'
+                emotion = 'No Thumbnail'
+                method = 'unavailable_no_thumbnail'
+            else:
+                try:
+                    download_image(row['thumbnail_url'], img_path)
+                except Exception:
+                    dom_color = '#Unknown'
+                    emotion = 'Download Failed'
+                    method = 'unavailable_download_failed'
+                else:
+                    try:
+                        color_thief = ColorThief(img_path)
+                        dominant_rgb = color_thief.get_color(quality=1)
+                        dom_color, emotion, method = _analyze_thumbnail(
+                            img_path,
+                            dominant_rgb,
+                        )
+                    except Exception:
+                        dom_color = "#Unknown"
+                        emotion = "Neutral"
+                        method = "unavailable_analysis_failed"
+        finally:
+            _cleanup_temp_image(img_path)
 
-        try:
-            download_image(row['thumbnail_url'], img_path)
-        except Exception:
-            dominant_colors.append('#Unknown')
-            dominant_emotions.append('Download Failed')
-            continue
-        
-        try:
-            color_thief = ColorThief(img_path)
-            dominant_rgb = color_thief.get_color(quality=1)
-            dom_color, emotion = _analyze_thumbnail(img_path, dominant_rgb)
-        except Exception:
-            dom_color = "#Unknown"
-            emotion = "Neutral"
-            
         dominant_colors.append(dom_color)
         dominant_emotions.append(emotion)
-        
-        # Cleanup temp image
-        _cleanup_temp_image(img_path)
+        cv_methods.append(method)
             
     top_trends['cv_color_hex'] = dominant_colors
     top_trends['cv_emotion'] = dominant_emotions
+    top_trends['cv_method'] = cv_methods
     
     return top_trends
