@@ -3,18 +3,13 @@ import pandas as pd
 import os
 from pathlib import Path
 import altair as alt
-from dotenv import load_dotenv
-from google import genai 
+import dashboard_content
 import dashboard_evidence
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+ARTIFACTS_ROOT = PROJECT_ROOT / "artifacts"
 RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
 LEGACY_OUTPUT = PROJECT_ROOT / "dremel_final_output.csv"
-
-# Load secure keys
-load_dotenv(PROJECT_ROOT / ".env")
-gemini_api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=gemini_api_key) if gemini_api_key else None
 
 # 1. Page Configuration
 st.set_page_config(page_title="Dremel Trend Engine", page_icon="⚙️", layout="wide")
@@ -112,6 +107,11 @@ else:
 df = load_data(str(data_path), file_version(data_path))
 if evidence_context and "video_id" in df.columns:
     df["source_url"] = df["video_id"].map(evidence_context["source_urls"])
+maya_brief = (
+    dashboard_content.load_maya_brief(ARTIFACTS_ROOT, evidence_context["run_id"])
+    if evidence_context
+    else None
+)
 
 if df.empty:
     st.error("Data pipeline empty. Please run main.py to generate the dataset.")
@@ -137,25 +137,27 @@ with st.sidebar:
     
     st.markdown("**1. Select Target Market Trend**")
     selected_trend = st.selectbox("Active Signals:", df['action_pair'].tolist(), label_visibility="collapsed")
+    selected_row = df[df["action_pair"] == selected_trend].iloc[0]
+    brief_matches_selection = bool(
+        maya_brief
+        and "video_id" in selected_row
+        and selected_row["video_id"] == maya_brief["candidate_id"]
+    )
     
-    st.markdown("**2. Deploy Agentic Brief**")
+    st.markdown("**2. Open Maya Brief**")
     generate_btn = st.button(
-        "Generate Strategy",
-        disabled=client is None,
+        "Open Content Brief",
+        disabled=not brief_matches_selection,
         help=(
-            "Add GEMINI_API_KEY to the local .env to enable brief generation."
-            if client is None
+            "A Maya brief is not available for this selected trend."
+            if not brief_matches_selection
             else None
         ),
     )
     
     st.divider()
     st.caption("🟢 Engine Status: ONLINE")
-    st.caption(
-        "🧠 LLM Core: Gemini 2.5 Flash"
-        if client is not None
-        else "🧠 LLM Core: unavailable (missing local key)"
-    )
+    st.caption("🧠 Content Specialist: Maya")
     st.caption("📍 Market Target: UK Region")
 
 # --- MAIN STAGE: EXECUTIVE DASHBOARD ---
@@ -198,49 +200,14 @@ with tab1:
     st.markdown("#### Agentic Strategy Deployment")
     st.caption("Select a validated trend from the sidebar to deploy an Information Gap brief.")
     
-    if generate_btn:
-        trend_data = df[df['action_pair'] == selected_trend].iloc[0]
-        
-        with st.status("Initializing Dremel Intelligence Pipeline...", expanded=True) as status:
-            st.write("🔍 Parsing Neuromarketing visual data...")
-            st.write(f"⚙️ Isolating target material: **{trend_data['detected_material']}**...")
-            st.write("🧠 Querying Gemini for Information Gap strategy...")
-            
-            prompt = f"""
-            You are a Senior Data Strategist and Neuromarketing Expert for Dremel UK.
-            We have detected a high-velocity trend in the UK market: "{selected_trend}".
-            The raw material driving this trend is: {trend_data['detected_material']}.
-            The high-converting emotional trigger detected in thumbnails is: {trend_data['cv_emotion']}.
-            
-            Your task is to output a strictly formatted two-part report:
-            
-            ### PART 1: STRATEGIC RATIONALE
-            Write a concise, 3-sentence executive explanation of WHY this trend is highly relevant to Dremel right now. 
-            Explain the cultural context of why {trend_data['detected_material']} upcycling appeals to "The DIYer New" demographic, and justify why leaning into the "{trend_data['cv_emotion']}" emotional trigger will capture multi-screen attention. Make it sound like a confident pitch to a Chief Marketing Officer.
-            
-            ### PART 2: THE AGENTIC CREATOR BRIEF
-            Write the influencer marketing brief for a YouTube Short.
-            Tone: Bold, brave, enthusiastic, helpful.
-            CRITICAL RULE: You MUST use Loewenstein’s Information Gap Theory for the video hook. Do not reveal the finished product in the hook. Focus heavily on the raw {trend_data['detected_material']} to build curiosity.
-            Include thumbnail instructions dictating the creator's facial expression based on the detected emotion.
-            """
-            
-            try:
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt
-                )
-                status.update(label="Strategic Brief Generated Successfully!", state="complete", expanded=False)
-                
-                st.session_state.generated_brief = response.text
-                st.session_state.current_trend = selected_trend
-                
-            except Exception as e:
-                status.update(label="API Connection Failed", state="error")
-                print(f"Gemini API request failed: {type(e).__name__}")
-                st.error("Gemini API request failed. Check the server logs and try again.")
+    if generate_btn and brief_matches_selection:
+        st.session_state.generated_brief = dashboard_content.format_maya_brief(maya_brief)
+        st.session_state.current_trend = selected_trend
 
-    if st.session_state.generated_brief:
+    if (
+        st.session_state.generated_brief
+        and st.session_state.current_trend == selected_trend
+    ):
         st.success(f"Active Strategy deployed for: {st.session_state.current_trend.title()}")
         st.markdown(st.session_state.generated_brief)
         
@@ -250,6 +217,8 @@ with tab1:
             file_name=f"Dremel_Brief_{st.session_state.current_trend.replace(' ', '_')}.txt",
             mime="text/plain"
         )
+    elif not brief_matches_selection:
+        st.info("Maya has not produced a content brief for this trend yet.")
 
 # --- TAB 2: THE VISUAL MATRIX ---
 with tab2:
