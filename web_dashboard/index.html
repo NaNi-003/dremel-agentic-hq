@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Dremel predictive trend intelligence dashboard">
+  <title>Dremel Trend Engine</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <img class="brand-logo" src="assets/dremel_logo.png" alt="Dremel">
+    <h2>🎛️ Strategy Controls</h2>
+    <div class="rule"></div>
+    <label class="field-label" for="trend-select">1. Select Target Market Trend</label>
+    <span class="field-note">Active Signals:</span>
+    <select id="trend-select"></select>
+    <label class="field-label brief-label">2. Open Maya Brief</label>
+    <button id="brief-button" type="button">Open Content Brief</button>
+    <div class="rule status-rule"></div>
+    <div class="status-list">
+      <span>🟢 Engine Status: ONLINE</span>
+      <span>🧠 Content Specialist: Maya</span>
+      <span>📍 Market Target: UK Region</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header>
+      <h1>Predictive Trend Engine</h1>
+      <p class="subtitle">Multimodal Intelligence &amp; Neuromarketing Pipeline</p>
+      <p id="run-caption" class="caption"></p>
+      <div id="run-warning" class="notice warning hidden"></div>
+    </header>
+
+    <section id="kpis" class="kpi-grid" aria-label="Key performance indicators"></section>
+
+    <nav class="tabs" aria-label="Dashboard sections">
+      <button class="tab active" data-tab="ideation">🤖 Autonomous Content Ideation</button>
+      <button class="tab" data-tab="matrix">📊 Trend Lifecycle Matrix</button>
+      <button class="tab" data-tab="feed">🔍 Raw Intelligence Feed</button>
+      <button class="tab" data-tab="roi">🧮 Campaign ROI Estimator</button>
+    </nav>
+
+    <section id="ideation" class="panel active">
+      <h3>Agentic Strategy Deployment</h3>
+      <p class="caption">Select a validated trend from the sidebar to deploy an Information Gap brief.</p>
+      <div id="brief-content" class="brief-content"></div>
+    </section>
+
+    <section id="matrix" class="panel">
+      <h3>Market Positioning Matrix</h3>
+      <div class="chart-shell">
+        <div class="chart-y-label">Market Growth (Velocity Score)</div>
+        <svg id="matrix-chart" role="img" aria-label="Trend market positioning scatter plot"></svg>
+        <div class="chart-x-label">Market Share (Estimated Engagement)</div>
+      </div>
+      <div id="legend" class="legend"></div>
+    </section>
+
+    <section id="feed" class="panel">
+      <h3>Auditable Intelligence Feed</h3>
+      <p class="caption">Verify the exact thumbnail, NLP action pair, and velocity score for every isolated trend.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Visual Context</th><th>Detected Action</th><th>Velocity Score</th><th>Emotional Trigger</th><th>Palette</th><th>Source video</th></tr></thead>
+          <tbody id="feed-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="roi" class="panel">
+      <h3>Financial Feasibility &amp; ROI Projections</h3>
+      <p class="caption">Model the fully burdened financial impact, accounting for traffic funnels, promo discounts, and fixed seeding costs.</p>
+      <div class="roi-layout">
+        <form id="roi-form" class="roi-controls">
+          <h4>1. Acquisition &amp; Fixed Costs</h4>
+          <label>Target Trend for Financial Model:<select id="roi-trend"></select></label>
+          <label>Target Creator Average Views <output id="views-output"></output><input id="views" type="range" min="10000" max="500000" value="150000" step="10000"></label>
+          <label>Influencer CPM (£ per 1000 views) <output id="cpm-output"></output><input id="cpm" type="range" min="5" max="50" value="20" step="1"></label>
+          <label>Fixed Seeding Costs (£) <output id="fixed-output"></output><input id="fixed" type="range" min="0" max="1000" value="150" step="50"></label>
+          <h4>2. Funnel Economics</h4>
+          <label>Baseline Click-Through Rate (CTR %) <output id="ctr-output"></output><input id="ctr" type="range" min="0.1" max="5" value="1" step="0.1"></label>
+          <label>Website Conversion Rate (CVR %) <output id="cvr-output"></output><input id="cvr" type="range" min="0.5" max="5" value="2" step="0.1"></label>
+          <h4>3. Margin &amp; Promotions</h4>
+          <label>Avg. Dremel Retail Price (£) <output id="price-output"></output><input id="price" type="range" min="30" max="150" value="70" step="5"></label>
+          <label>Base Tool Margin (£) <output id="margin-output"></output><input id="margin" type="range" min="10" max="100" value="35" step="5"></label>
+          <label>Influencer Promo Code Discount (%) <output id="discount-output"></output><input id="discount" type="range" min="0" max="30" value="10" step="5"></label>
+          <label class="toggle-row"><input id="clv" type="checkbox"> Include Year 1 Accessory CLV (+£15/unit)</label>
+        </form>
+        <div class="roi-results">
+          <h4>Projected Outcomes</h4>
+          <div id="roi-kpis" class="roi-kpis"></div>
+          <div id="roi-takeaway" class="notice info"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <noscript>This dashboard requires JavaScript to display the published research.</noscript>
+  <script src="app.js" defer></script>
+</body>
+</html>

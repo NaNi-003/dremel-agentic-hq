@@ -1,0 +1,123 @@
+import argparse
+import json
+import re
+import shutil
+from pathlib import Path
+from urllib.parse import urlparse
+
+import pandas as pd
+
+import dashboard_content
+import dashboard_evidence
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_SOURCE_DIR = PROJECT_ROOT / "web_dashboard"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "dist" / "dashboard"
+DEFAULT_RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
+DEFAULT_ARTIFACTS_ROOT = PROJECT_ROOT / "artifacts"
+DEFAULT_LEGACY_OUTPUT = PROJECT_ROOT / "dremel_final_output.csv"
+
+
+def _safe_https_url(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return None
+    return value if parsed.scheme == "https" and parsed.hostname else None
+
+
+def _browser_safe_rows(rows):
+    safe_rows = []
+    for source in rows:
+        row = dict(source)
+        row["thumbnail_url"] = _safe_https_url(row.get("thumbnail_url"))
+        row["source_url"] = _safe_https_url(row.get("source_url"))
+        color = row.get("cv_color_hex")
+        if not isinstance(color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            row["cv_color_hex"] = "#cccccc"
+        safe_rows.append(row)
+    return safe_rows
+
+
+def _json_safe_rows(dataframe):
+    records = dataframe.where(pd.notna(dataframe), None).to_dict(orient="records")
+    return json.loads(json.dumps(records, allow_nan=False))
+
+
+def build_static_dashboard(output_dir, *, rows, brief, run_context, source_dir=DEFAULT_SOURCE_DIR):
+    """Build a dependency-free static copy of the original dashboard UI."""
+    output_dir = Path(output_dir)
+    source_dir = Path(source_dir)
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Cannot build dashboard: no validated rows")
+    rows = _browser_safe_rows(rows)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    shutil.copytree(source_dir, output_dir)
+
+    logo_source = PROJECT_ROOT / "dremel_logo.png"
+    assets_dir = output_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(logo_source, assets_dir / "dremel_logo.png")
+
+    candidate_ids = {row.get("video_id") for row in rows}
+    if not (
+        isinstance(brief, dict)
+        and brief.get("run_id") == run_context.get("run_id")
+        and brief.get("candidate_id") in candidate_ids
+    ):
+        brief = None
+
+    data_dir = output_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    payload = {"run": run_context, "rows": rows, "maya_brief": brief}
+    (data_dir / "dashboard.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    return output_dir
+
+
+def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_ARTIFACTS_ROOT):
+    context = dashboard_evidence.load_latest_evidence(Path(runs_root))
+    if context:
+        dataframe = pd.read_csv(context["dashboard_snapshot"])
+        dataframe = dashboard_evidence.validate_dashboard_dataframe(dataframe)
+        if "video_id" in dataframe.columns:
+            dataframe["source_url"] = dataframe["video_id"].map(context["source_urls"])
+        run = {
+            key: context[key]
+            for key in ("run_id", "collected_at", "status", "partial_failure_count")
+        }
+        brief = dashboard_content.load_maya_brief(artifacts_root, context["run_id"])
+        return _json_safe_rows(dataframe), brief, run
+
+    if dashboard_evidence.latest_pointer_exists(Path(runs_root)):
+        raise RuntimeError("The latest evidence bundle failed validation")
+
+    dataframe = dashboard_evidence.validate_dashboard_dataframe(
+        pd.read_csv(DEFAULT_LEGACY_OUTPUT)
+    )
+    return _json_safe_rows(dataframe), None, {
+        "run_id": None,
+        "collected_at": None,
+        "status": "legacy",
+        "partial_failure_count": 0,
+    }
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Build the static Dremel dashboard")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
+    args = parser.parse_args(argv)
+    rows, brief, run = load_dashboard_payload()
+    output = build_static_dashboard(args.output, rows=rows, brief=brief, run_context=run)
+    print(json.dumps({"status": "built", "output": str(output.resolve()), "rows": len(rows)}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
