@@ -83,7 +83,7 @@ def coordinate_latest(
             runs_root=runs_root,
             reviews_root=reviews_root,
             run_id=run_id,
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=datetime.now(timezone.utc),
         )
 
     if decision_path.exists():

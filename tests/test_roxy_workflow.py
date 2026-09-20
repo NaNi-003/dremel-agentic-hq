@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -18,17 +19,21 @@ def _context(tmp_path):
 
 def test_coordinate_latest_builds_approved_carl_and_maya_flow_without_publishing(tmp_path, monkeypatch):
     calls = []
+    generated_at_values = []
     context = _context(tmp_path)
     packet_path = tmp_path / "artifacts" / "reviews" / "run-1" / "review_packet.json"
     decision_path = packet_path.with_name("review_decision.json")
     brief_path = packet_path.with_name("maya_content_brief.json")
 
     monkeypatch.setattr(roxy_workflow.dashboard_evidence, "load_latest_evidence", lambda root: context)
-    monkeypatch.setattr(
-        roxy_workflow.phase3_review,
-        "create_review_packet",
-        lambda **kwargs: (packet_path.parent.mkdir(parents=True), packet_path.write_text("{}", encoding="utf-8"), packet_path)[-1],
-    )
+
+    def create_packet(**kwargs):
+        generated_at_values.append(kwargs["generated_at"])
+        packet_path.parent.mkdir(parents=True)
+        packet_path.write_text("{}", encoding="utf-8")
+        return packet_path
+
+    monkeypatch.setattr(roxy_workflow.phase3_review, "create_review_packet", create_packet)
     monkeypatch.setattr(
         roxy_workflow.carl_integration,
         "request_carl_review",
@@ -70,6 +75,9 @@ def test_coordinate_latest_builds_approved_carl_and_maya_flow_without_publishing
     assert result["run_id"] == "run-1"
     assert result["candidate_id"] == "video-1"
     assert calls == [("build", tmp_path / "dist")]
+    assert len(generated_at_values) == 1
+    assert isinstance(generated_at_values[0], datetime)
+    assert generated_at_values[0].tzinfo is not None
     assert result["site_url"] is None
 
 
