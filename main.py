@@ -499,7 +499,10 @@ def _run_pipeline_impl(
     write_csv_atomically(legacy_df, paths["dashboard_snapshot"])
     progress["rows_written"] = len(legacy_df)
     print(f"\nPipeline Complete! {len(legacy_df)} unique videos saved to {output_path}.")
-    print("You may now launch the UI: 'streamlit run app.py'")
+    print(
+        "You may now build the dashboard: "
+        "'python static_dashboard.py --output dist/dashboard'"
+    )
     final_status = "partial" if partial_failures else "success"
     final_message = (
         "Pipeline completed with partial collection failures."

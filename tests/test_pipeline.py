@@ -29,6 +29,7 @@ def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_pat
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: nlp_engine.process_and_score_data(videos, now=fixed_now),
@@ -68,6 +69,7 @@ def test_run_pipeline_returns_a_structured_failure_result(tmp_path):
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=fail_discovery,
     )
 
@@ -89,6 +91,7 @@ def test_empty_pipeline_result_preserves_the_existing_output(tmp_path):
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: pd.DataFrame(),
@@ -113,6 +116,7 @@ def test_late_pipeline_failure_reports_completed_stage_counts_and_preserves_outp
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: nlp_engine.process_and_score_data(videos, now=fixed_now),
@@ -135,6 +139,7 @@ def test_pipeline_creates_parent_directory_for_a_custom_output_path(tmp_path):
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: nlp_engine.process_and_score_data(videos, now=fixed_now),
@@ -160,6 +165,7 @@ def test_csv_write_failure_preserves_existing_output(tmp_path, monkeypatch):
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=output_path,
+        runs_root=tmp_path / "runs",
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: nlp_engine.process_and_score_data(videos, now=fixed_now),

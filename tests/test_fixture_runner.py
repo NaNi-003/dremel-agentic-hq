@@ -19,6 +19,8 @@ def test_fixture_runner_exercises_pipeline_without_external_credentials(tmp_path
             "scripts/run_fixture_pipeline.py",
             "--output",
             str(output_path),
+            "--runs-root",
+            str(tmp_path / "runs"),
         ],
         cwd=PROJECT_ROOT,
         env=env,
@@ -32,6 +34,7 @@ def test_fixture_runner_exercises_pipeline_without_external_credentials(tmp_path
     assert result["status"] == "success"
     assert result["rows_written"] == 1
     assert output_path.exists()
+    assert Path(result["run_dir"]).is_relative_to(tmp_path / "runs")
     candidates = json.loads(
         Path(result["candidates_path"]).read_text(encoding="utf-8")
     )

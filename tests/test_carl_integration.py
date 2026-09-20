@@ -42,6 +42,7 @@ def test_build_carl_prompt_contains_packet_and_exact_decision_contract():
     assert '"run_id": "run-1"' in prompt
     assert '"packet_sha256": "' + ("b" * 64) + '"' in prompt
     assert '"decision": "approve | reject | needs_evidence"' in prompt
+    assert 'exactly [] or ["partial_collection"]' in prompt
     assert "Return only the JSON object" in prompt
 
 
@@ -122,3 +123,24 @@ def test_invoke_carl_profile_uses_named_hermes_profile(monkeypatch):
     assert observed["command"][0:3] == ["hermes", "-p", "carl"]
     assert observed["command"][-2:] == ["--oneshot", "review this"]
     assert response == '{"decision":"reject"}'
+
+
+def test_invoke_carl_profile_uses_temporary_assignment_for_windows_sized_prompt(monkeypatch):
+    observed = {}
+    large_prompt = "review evidence\n" * 5000
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        assignment = command[-1]
+        marker = "Read the complete assignment from this UTF-8 file: "
+        assignment_path = assignment.split(marker, 1)[1].split(". Return", 1)[0]
+        with open(assignment_path, encoding="utf-8") as handle:
+            observed["assignment"] = handle.read()
+        return SimpleNamespace(returncode=0, stdout='{"decision":"reject"}')
+
+    monkeypatch.setattr(carl_integration.subprocess, "run", fake_run)
+
+    carl_integration.invoke_carl_profile(large_prompt, profile="carl")
+
+    assert observed["assignment"] == large_prompt
+    assert large_prompt not in observed["command"]

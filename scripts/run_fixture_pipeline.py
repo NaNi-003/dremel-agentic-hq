@@ -31,6 +31,7 @@ def fixture_visual_analysis(frame, top_n=10):
 def parse_args():
     parser = argparse.ArgumentParser(description="Exercise the Dremel pipeline with local fixtures.")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
     return parser.parse_args()
 
 
@@ -42,7 +43,7 @@ def main_cli():
     result = main.run_pipeline(
         search_terms=["fixture search"],
         output_path=args.output,
-        runs_root=DEFAULT_RUNS_ROOT,
+        runs_root=args.runs_root,
         discover_channels_fn=lambda terms, max_results: ["fixture-channel"],
         scrape_videos_fn=lambda channels, max_results: videos,
         process_data_fn=lambda collected: nlp_engine.process_and_score_data(
