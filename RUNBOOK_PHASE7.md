@@ -15,6 +15,25 @@ Pipeline -> Carl review -> Maya brief -> static build -> user-approved here.now 
 
 The here.now account dashboard remains at `https://here.now/dashboard`; it is not the project URL.
 
+## Run the complete Roxy coordination step
+
+Build and check the latest validated run without changing the public site:
+
+```bash
+"C:/Users/kiran/anaconda3/envs/dsmm_env/python.exe" scripts/run_roxy_workflow.py
+```
+
+After the user approves publication, run:
+
+```bash
+"C:/Users/kiran/anaconda3/envs/dsmm_env/python.exe" scripts/run_roxy_workflow.py --publish
+```
+
+The command reuses validated, write-once Carl and Maya artifacts when they already
+exist. For a new run, it creates Carl's packet, stops if Carl does not approve,
+sends only an approved candidate to Maya, builds the static site, and publishes
+only when `--publish` is explicitly supplied.
+
 ## Run the publishing step
 
 The API key is read without printing it from either:
