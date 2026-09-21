@@ -32,8 +32,21 @@ def _create_run_bundle(tmp_path, *, status="success"):
             {
                 "video_id": "video-1",
                 "title": "Restore a table",
+                "description": "A damaged table is restored with a careful sanding process.",
                 "source_url": "https://www.youtube.com/watch?v=video-1",
                 "transcript": "Restore the damaged table surface.",
+                "transcript_status": "available",
+                "publish_date": "2026-09-17T07:00:00Z",
+                "views": 12000,
+                "comments": 45,
+                "comment_sentiment": {
+                    "comments_sampled": 25,
+                    "sentiment_score": 0.41,
+                    "confidence": "medium",
+                },
+                "comment_sample": [
+                    {"text": "Please show which sanding bit you used.", "like_count": 8}
+                ],
             }
         ],
     }
@@ -46,6 +59,22 @@ def _create_run_bundle(tmp_path, *, status="success"):
                 "video_id": "video-1",
                 "action_pair": "Restore Table",
                 "velocity_score": 42.5,
+                "candidate_rank": 1,
+                "candidate_tier": "primary",
+                "cv_palette": ["#785028", "#1e2832", "#dcd2be"],
+                "cv_color_temperature": "warm",
+                "cv_face_count": 1,
+                "cv_emotion": "Happy",
+                "cv_expression_confidence": 0.72,
+                "cv_brightness": 0.5,
+                "cv_saturation": 0.4,
+                "cv_contrast": 0.3,
+                "cv_edge_density": 0.2,
+                "cv_text_like_region_density": 0.1,
+                "cv_visual_clutter": "medium",
+                "cv_face_area_share": 0.15,
+                "cv_central_face": True,
+                "cv_marketing_cues": ["warm color direction", "face-led creative"],
                 "source": evidence["videos"][0],
                 "provenance": {
                     "extraction_source": "transcript",
@@ -102,6 +131,37 @@ def test_create_review_packet_freezes_source_digests_and_evidence_refs(tmp_path)
             "evidence_refs": ["evidence.json#/videos/0"],
             "action_pair": "Restore Table",
             "velocity_score": 42.5,
+            "research_evidence": {
+                "title": "Restore a table",
+                "description": "A damaged table is restored with a careful sanding process.",
+                "publish_date": "2026-09-17T07:00:00Z",
+                "views": 12000,
+                "comment_count": 45,
+                "comment_sentiment": {
+                    "comments_sampled": 25,
+                    "sentiment_score": 0.41,
+                    "confidence": "medium",
+                },
+                "comment_excerpts": ["Please show which sanding bit you used."],
+                "transcript_status": "available",
+            },
+            "visual_evidence": {
+                "palette": ["#785028", "#1e2832", "#dcd2be"],
+                "color_temperature": "warm",
+                "face_count": 1,
+                "facial_expression": "Happy",
+                "expression_confidence": 0.72,
+                "brightness": 0.5,
+                "saturation": 0.4,
+                "contrast": 0.3,
+                "edge_density": 0.2,
+                "text_like_region_density": 0.1,
+                "visual_clutter": "medium",
+                "face_area_share": 0.15,
+                "central_face": True,
+                "marketing_cues": ["warm color direction", "face-led creative"],
+                "scope": "thumbnail",
+            },
             "provenance": {
                 "extraction_source": "transcript",
                 "cv_method": "fixture",
@@ -110,6 +170,89 @@ def test_create_review_packet_freezes_source_digests_and_evidence_refs(tmp_path)
         }
     ]
     assert packet["evidence_is_untrusted"] is True
+
+
+def test_review_packet_prioritizes_primary_candidates_and_freezes_secondary_rows(tmp_path):
+    runs_root, run_id = _create_run_bundle(tmp_path)
+    run_dir = runs_root / run_id
+    evidence_path = run_dir / "evidence.json"
+    candidates_path = run_dir / "candidates.json"
+    manifest_path = run_dir / "manifest.json"
+
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
+    provenance = candidates["candidates"][0]["provenance"]
+    for rank in range(2, 17):
+        source = {
+            "video_id": f"video-{rank}",
+            "title": f"Ranked video {rank}",
+            "description": "A ranked result.",
+            "source_url": f"https://www.youtube.com/watch?v=video-{rank}",
+            "transcript": "",
+            "transcript_status": "unavailable",
+            "publish_date": "2026-09-16T07:00:00Z",
+            "views": 5000,
+            "comments": 12,
+        }
+        evidence["videos"].append(source)
+        candidates["candidates"].append(
+            {
+                "video_id": f"video-{rank}",
+                "action_pair": f"Ranked Action {rank}",
+                "velocity_score": 42.5 - rank,
+                "candidate_tier": "primary" if rank <= 15 else "secondary",
+                "candidate_rank": rank,
+                "source": source,
+                "provenance": provenance,
+            }
+        )
+    _write_json(evidence_path, evidence)
+    _write_json(candidates_path, candidates)
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["counts"] = {"candidates_scored": 16, "rows_written": 16}
+    _write_json(manifest_path, manifest)
+    rows = ["video_id,action_pair,velocity_score"] + [
+        f"video-{rank},Ranked Action {rank},{42.5 - rank}" for rank in range(1, 17)
+    ]
+    (run_dir / "dashboard_output.csv").write_text(
+        "\n".join(rows) + "\n",
+        encoding="utf-8",
+    )
+
+    packet_path = phase3_review.create_review_packet(
+        runs_root=runs_root,
+        reviews_root=tmp_path / "reviews",
+        run_id=run_id,
+        generated_at=FIXED_NOW,
+    )
+    packet = phase3_review.validate_review_packet(packet_path, artifacts_root=tmp_path)
+
+    assert [item["candidate_id"] for item in packet["candidates"]] == [
+        f"video-{rank}" for rank in range(1, 16)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("candidate_tier", "secondary"), ("candidate_rank", 2)],
+)
+def test_create_review_packet_rejects_malformed_candidate_tiers_and_ranks(
+    tmp_path, field, value
+):
+    runs_root, run_id = _create_run_bundle(tmp_path)
+    candidates_path = runs_root / run_id / "candidates.json"
+    candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
+    candidates["candidates"][0][field] = value
+    _write_json(candidates_path, candidates)
+
+    with pytest.raises(phase3_review.ReviewValidationError, match="tier|rank"):
+        phase3_review.create_review_packet(
+            runs_root=runs_root,
+            reviews_root=tmp_path / "reviews",
+            run_id=run_id,
+            generated_at=FIXED_NOW,
+        )
 
 
 def test_validate_review_packet_rejects_post_packet_source_mutation(tmp_path):

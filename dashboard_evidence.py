@@ -149,10 +149,11 @@ def load_latest_evidence(runs_root="artifacts/runs"):
             or not isinstance(counts, dict)
         ):
             raise TypeError("Artifact collections must be arrays")
+        videos_collected = counts.get("videos_collected")
         count_values = [counts.get("candidates_scored"), counts.get("rows_written")]
         if any(
             isinstance(value, bool) or not isinstance(value, int) or value < 0
-            for value in count_values
+            for value in [videos_collected, *count_values]
         ):
             raise TypeError("Manifest candidate counts must be non-negative integers")
         snapshot_frame = pd.read_csv(dashboard_snapshot)
@@ -216,6 +217,8 @@ def load_latest_evidence(runs_root="artifacts/runs"):
         "status": manifest.get("status"),
         "collected_at": evidence.get("collected_at"),
         "partial_failure_count": len(failures),
+        "videos_collected": videos_collected,
+        "candidates_scored": counts.get("candidates_scored"),
         "source_urls": source_urls,
         "dashboard_snapshot": dashboard_snapshot,
     }

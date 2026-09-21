@@ -56,7 +56,7 @@ def coordinate_latest(
     publish=False,
     deployment_state=None,
 ):
-    """Coordinate Carl, Maya, static build, and optional user-approved publication."""
+    """Coordinate Carl, build the dashboard, and optionally publish after approval."""
     project_root = Path(project_root).resolve()
     artifacts_root = project_root / "artifacts"
     runs_root = artifacts_root / "runs"
@@ -74,7 +74,6 @@ def coordinate_latest(
     review_dir = reviews_root / run_id
     packet_path = review_dir / "review_packet.json"
     decision_path = review_dir / "review_decision.json"
-    brief_path = review_dir / "maya_content_brief.json"
 
     if packet_path.exists():
         phase3_review.validate_review_packet(packet_path, artifacts_root=artifacts_root)
@@ -109,30 +108,24 @@ def coordinate_latest(
             "site_url": None,
         }
 
-    if brief_path.exists():
-        brief = dashboard_content.load_maya_brief(artifacts_root, run_id)
-        if brief is None:
-            raise RoxyWorkflowError("Existing Maya brief failed validation")
-    else:
-        maya_result = maya_integration.request_maya_brief(
-            packet_path=packet_path,
-            decision_path=decision_path,
-            artifacts_root=artifacts_root,
-        )
-        brief = maya_result["brief"]
-    _ensure_brief_matches_approval(brief, decision, run_id)
-
+    maya_result = maya_integration.request_primary_briefs(
+        packet_path=packet_path,
+        artifacts_root=artifacts_root,
+    )
     rows, dashboard_brief, run_context = static_dashboard.load_dashboard_payload(
         runs_root=runs_root,
         artifacts_root=artifacts_root,
     )
     if run_context.get("run_id") != run_id:
         raise RoxyWorkflowError("Dashboard run changed during coordination")
-    _ensure_brief_matches_approval(dashboard_brief, decision, run_id)
+    if dashboard_brief is not None:
+        _ensure_brief_matches_approval(dashboard_brief, decision, run_id)
+    dashboard_briefs = dashboard_content.load_maya_briefs(artifacts_root, run_id)
     static_dashboard.build_static_dashboard(
         output_dir,
         rows=rows,
         brief=dashboard_brief,
+        briefs=dashboard_briefs,
         run_context=run_context,
     )
 
@@ -161,6 +154,7 @@ def coordinate_latest(
         "run_id": run_id,
         "carl_decision": "approve",
         "candidate_id": decision["selected_candidate_id"],
+        "brief_count": maya_result["brief_count"],
         "site_url": site_url,
         "output_dir": str(output_dir.resolve()),
     }

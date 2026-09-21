@@ -45,6 +45,7 @@ def _write_valid_run(
             "completed_at": "2026-09-16T12:30:00Z",
             "partial_failures": partial_failures or [],
             "counts": {
+                "videos_collected": len(candidates),
                 "candidates_scored": len(candidates),
                 "rows_written": len(candidates),
             },
@@ -111,6 +112,8 @@ def test_load_latest_evidence_returns_timestamp_status_and_source_links(tmp_path
         "status": "partial",
         "collected_at": "2026-09-16T12:20:00Z",
         "partial_failure_count": 1,
+        "videos_collected": 1,
+        "candidates_scored": 1,
         "source_urls": {"video-1": source_url},
         "dashboard_snapshot": run_dir / "dashboard_output.csv",
     }

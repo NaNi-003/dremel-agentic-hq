@@ -22,6 +22,60 @@ def _fixture_visual_analysis(frame, top_n=10):
     return analyzed
 
 
+def test_ranked_candidates_keep_15_primary_and_add_secondary_results():
+    frame = pd.DataFrame(
+        [
+            {
+                "video_id": f"video-{index:02d}",
+                "velocity_score": 1000 - index,
+            }
+            for index in range(30)
+        ]
+    )
+    observed = {}
+
+    def analyze_primary(rows, top_n):
+        observed["top_n"] = top_n
+        analyzed = rows.head(top_n).copy()
+        analyzed["cv_color_hex"] = "#123456"
+        analyzed["cv_emotion"] = "Fixture"
+        analyzed["cv_method"] = "fixture"
+        return analyzed
+
+    candidates = main.prepare_ranked_candidates(frame, analyze_primary)
+
+    assert observed["top_n"] == 15
+    assert len(candidates) == 30
+    assert candidates.iloc[:15]["candidate_tier"].tolist() == ["primary"] * 15
+    assert candidates.iloc[15:]["candidate_tier"].tolist() == ["secondary"] * 15
+    assert candidates.iloc[15:]["cv_emotion"].tolist() == ["Not analyzed"] * 15
+    assert candidates["candidate_rank"].tolist() == list(range(1, 31))
+
+
+def test_comment_enrichment_is_bounded_to_primary_candidates_and_keeps_score_separate():
+    calls = []
+    raw = [
+        {"video_id": "primary", "title": "Primary"},
+        {"video_id": "secondary", "title": "Secondary"},
+    ]
+
+    result = main.enrich_primary_comments_with_diagnostics(
+        raw,
+        ["primary"],
+        max_results=100,
+        get_comments_fn=lambda video_id, max_results: calls.append(
+            (video_id, max_results)
+        )
+        or [{"text": "Excellent result", "like_count": 2}],
+    )
+
+    assert calls == [("primary", 100)]
+    assert result.items[0]["comment_sentiment"]["comments_sampled"] == 1
+    assert "velocity_score" not in result.items[0]["comment_sentiment"]
+    assert "comment_sentiment" not in result.items[1]
+    assert result.failures == []
+
+
 def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_path):
     output_path = tmp_path / "dremel_final_output.csv"
     fixed_now = datetime(2026, 9, 16, tzinfo=timezone.utc)
@@ -34,6 +88,21 @@ def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_pat
         scrape_videos_fn=lambda channels, max_results: _fixture_videos(),
         process_data_fn=lambda videos: nlp_engine.process_and_score_data(videos, now=fixed_now),
         visual_analysis_fn=_fixture_visual_analysis,
+        comment_enrichment_fn=lambda videos, primary_ids, max_results: main.StageResult(
+            items=[
+                dict(
+                    video,
+                    comment_sample=[{"text": "Great result", "like_count": 1}],
+                    comment_sentiment={
+                        "comments_sampled": 1,
+                        "sentiment_score": 0.8,
+                        "confidence": "low",
+                    },
+                )
+                for video in videos
+            ],
+            failures=[],
+        ),
     )
 
     assert result.status == "success"
@@ -58,6 +127,8 @@ def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_pat
             "cv_emotion": "Fixture",
         }
     ]
+    evidence = json.loads(Path(result.evidence_path).read_text(encoding="utf-8"))
+    assert evidence["videos"][0]["comment_sentiment"]["sentiment_score"] == 0.8
 
 
 def test_run_pipeline_returns_a_structured_failure_result(tmp_path):

@@ -1,13 +1,22 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
+import dashboard_content
 import phase3_review
 import run_artifacts
 
 
 class MayaIntegrationError(ValueError):
     pass
+
+
+_WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 def _reject_nonstandard_constant(value):
@@ -33,18 +42,30 @@ def parse_maya_response(response_text):
 def validate_maya_brief(brief):
     required_fields = {
         "title",
+        "objective",
         "strategic_rationale",
         "audience",
+        "audience_insight",
         "tone",
         "hook",
+        "hook_options",
+        "information_gap",
         "concept",
         "key_beats",
+        "product_role",
         "thumbnail_direction",
         "call_to_action",
+        "success_metrics",
+        "claims_guardrails",
     }
     if not isinstance(brief, dict) or set(brief) != required_fields:
         raise MayaIntegrationError("Maya brief fields differ from the contract")
-    text_fields = required_fields - {"key_beats"}
+    text_fields = required_fields - {
+        "key_beats",
+        "hook_options",
+        "information_gap",
+        "success_metrics",
+    }
     if not all(
         isinstance(brief[field], str) and brief[field].strip()
         for field in text_fields
@@ -53,14 +74,34 @@ def validate_maya_brief(brief):
     beats = brief["key_beats"]
     if (
         not isinstance(beats, list)
-        or len(beats) < 3
+        or len(beats) < 5
         or not all(isinstance(beat, str) and beat.strip() for beat in beats)
     ):
-        raise MayaIntegrationError("Maya brief requires at least three key beats")
+        raise MayaIntegrationError("Maya brief requires at least five key beats")
+    for field, minimum in (("hook_options", 3), ("success_metrics", 3)):
+        values = brief[field]
+        if (
+            not isinstance(values, list)
+            or len(values) < minimum
+            or not all(isinstance(value, str) and value.strip() for value in values)
+        ):
+            raise MayaIntegrationError(f"Maya brief {field} is incomplete")
+    gap = brief["information_gap"]
+    if (
+        not isinstance(gap, dict)
+        or set(gap) != {"known", "unknown", "payoff"}
+        or not all(isinstance(value, str) and value.strip() for value in gap.values())
+    ):
+        raise MayaIntegrationError("Maya brief information gap is invalid")
     return brief
 
 
-def build_maya_prompt(packet, decision):
+def build_maya_prompt(
+    packet,
+    decision,
+    *,
+    assignment_source="Carl's approved opportunity",
+):
     """Build a focused content-brief assignment from Carl's approval."""
     if decision.get("decision") != "approve":
         raise MayaIntegrationError("Maya requires an approved Carl decision")
@@ -78,14 +119,25 @@ def build_maya_prompt(packet, decision):
 
     output_shape = {
         "title": "brief title",
+        "objective": "specific communication or business objective",
         "strategic_rationale": "concise rationale",
         "audience": "intended audience",
+        "audience_insight": "evidence-grounded audience tension or motivation",
         "tone": "creative tone",
         "hook": "Information Gap hook without revealing the result",
+        "hook_options": ["alternative hook 1", "alternative hook 2", "alternative hook 3"],
+        "information_gap": {
+            "known": "what the opening establishes",
+            "unknown": "the specific unanswered question",
+            "payoff": "how and when the answer is delivered",
+        },
         "concept": "YouTube Short concept",
-        "key_beats": ["beat 1", "beat 2", "beat 3"],
+        "key_beats": ["beat 1", "beat 2", "beat 3", "beat 4", "beat 5"],
+        "product_role": "natural, evidence-supported Dremel role",
         "thumbnail_direction": "visual and creator-expression direction",
         "call_to_action": "viewer call to action",
+        "success_metrics": ["metric 1", "metric 2", "metric 3"],
+        "claims_guardrails": "unsupported claims the creator must avoid",
     }
     assignment = {
         "run_id": packet["run_id"],
@@ -94,10 +146,14 @@ def build_maya_prompt(packet, decision):
         "evidence_citations": decision.get("evidence_citations"),
     }
     return (
-        "Create a concise Dremel UK YouTube Short content brief from Carl's approved "
-        "opportunity. Preserve the evidence and do not invent product claims. Use "
-        "Loewenstein's Information Gap approach for the hook: build curiosity without "
-        "revealing the finished result. Keep the tone bold, brave, enthusiastic, and "
+        "Create a concise, professional creative brief for a Dremel UK YouTube Short "
+        f"from {assignment_source}. Preserve the evidence and do not invent "
+        "product claims. Apply Loewenstein's Information Gap Theory explicitly: define "
+        "what viewers know, the precise missing information that creates curiosity, and "
+        "a satisfying delayed payoff. Before returning, perform one silent self-check "
+        "for evidence fidelity, specificity, executable production, honest payoff, brand "
+        "fit, and non-generic language; revise weak sections once. "
+        "Keep the tone bold, brave, enthusiastic, and "
         "helpful.\n\nReturn only the JSON object—no markdown or commentary—using "
         "exactly this shape:\n"
         f"{json.dumps(output_shape, indent=2, sort_keys=True)}\n\n"
@@ -170,3 +226,70 @@ def request_maya_brief(
     brief_path = packet_path.with_name("maya_content_brief.json")
     run_artifacts.write_json_atomically(artifact, brief_path)
     return {"brief": artifact, "brief_path": brief_path}
+
+
+def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
+    """Create one contract-validated Maya brief for every primary candidate."""
+    packet_path = Path(packet_path).resolve()
+    packet = phase3_review.validate_review_packet(
+        packet_path,
+        artifacts_root=artifacts_root,
+    )
+    candidates = packet.get("candidates", [])
+    if not candidates or len(candidates) > 15:
+        raise MayaIntegrationError("Primary candidate packet must contain 1 to 15 candidates")
+
+    saved = dashboard_content.load_maya_briefs(artifacts_root, packet["run_id"])
+    briefs = {}
+    briefs_dir = (packet_path.parent / "maya_briefs").resolve()
+    for candidate in candidates:
+        candidate_id = candidate["candidate_id"]
+        if (
+            not isinstance(candidate_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", candidate_id)
+            or candidate_id.upper() in _WINDOWS_RESERVED_NAMES
+        ):
+            raise MayaIntegrationError("Candidate ID is unsafe for an artifact filename")
+        brief_path = (briefs_dir / f"{candidate_id}.json").resolve()
+        if brief_path.parent != briefs_dir:
+            raise MayaIntegrationError("Candidate ID escapes the brief artifact directory")
+        existing = saved.get(candidate_id)
+        if (
+            isinstance(existing, dict)
+            and existing.get("source_decision") == "primary_candidate_batch"
+        ):
+            briefs[candidate_id] = existing
+            continue
+        decision = {
+            "decision": "approve",
+            "selected_candidate_id": candidate_id,
+            "rationale": (
+                "Create a demonstration-ready brief for this validated top-15 "
+                "primary marketing opportunity."
+            ),
+            "evidence_citations": candidate.get("evidence_refs", []),
+        }
+        prompt = build_maya_prompt(
+            packet,
+            decision,
+            assignment_source="a validated top-15 primary opportunity",
+        )
+        brief = validate_maya_brief(
+            parse_maya_response((invoke or invoke_maya_profile)(prompt))
+        )
+        artifact = {
+            "schema_version": 1,
+            "run_id": packet["run_id"],
+            "candidate_id": candidate_id,
+            "creator": "maya",
+            "source_decision": "primary_candidate_batch",
+            "brief": brief,
+        }
+        run_artifacts.write_json_atomically(artifact, brief_path)
+        briefs[candidate_id] = artifact
+
+    return {
+        "run_id": packet["run_id"],
+        "brief_count": len(briefs),
+        "briefs": briefs,
+    }

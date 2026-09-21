@@ -111,6 +111,22 @@ def _build_candidate_summaries(
         if source != evidence_videos[evidence_indexes[candidate_id]]:
             raise ReviewValidationError("Candidate embedded source differs from evidence")
         seen_candidate_ids.add(candidate_id)
+        expected_rank = index + 1
+        expected_tier = "primary" if expected_rank <= min(15, len(candidate_items)) else "secondary"
+        if candidate.get("candidate_rank") != expected_rank:
+            raise ReviewValidationError("Candidate rank does not match its ordered position")
+        if candidate.get("candidate_tier") != expected_tier:
+            raise ReviewValidationError("Candidate tier does not match its ordered rank")
+        if expected_tier == "secondary":
+            continue
+        comment_sample = source.get("comment_sample", [])
+        comment_excerpts = [
+            item.get("text").strip()
+            for item in comment_sample[:5]
+            if isinstance(item, dict)
+            and isinstance(item.get("text"), str)
+            and item.get("text").strip()
+        ]
         summaries.append(
             {
                 "candidate_id": candidate_id,
@@ -120,6 +136,37 @@ def _build_candidate_summaries(
                 ],
                 "action_pair": candidate.get("action_pair"),
                 "velocity_score": candidate.get("velocity_score"),
+                "research_evidence": {
+                    "title": source.get("title"),
+                    "description": (source.get("description") or "")[:2000],
+                    "publish_date": source.get("publish_date"),
+                    "views": source.get("views"),
+                    "comment_count": source.get("comments"),
+                    "comment_sentiment": source.get("comment_sentiment"),
+                    "comment_excerpts": comment_excerpts,
+                    "transcript_status": source.get("transcript_status", "unavailable"),
+                },
+                "visual_evidence": {
+                    "palette": candidate.get("cv_palette", []),
+                    "color_temperature": candidate.get("cv_color_temperature"),
+                    "face_count": candidate.get("cv_face_count", 0),
+                    "facial_expression": candidate.get("cv_emotion"),
+                    "expression_confidence": candidate.get(
+                        "cv_expression_confidence"
+                    ),
+                    "brightness": candidate.get("cv_brightness"),
+                    "saturation": candidate.get("cv_saturation"),
+                    "contrast": candidate.get("cv_contrast"),
+                    "edge_density": candidate.get("cv_edge_density"),
+                    "text_like_region_density": candidate.get(
+                        "cv_text_like_region_density"
+                    ),
+                    "visual_clutter": candidate.get("cv_visual_clutter"),
+                    "face_area_share": candidate.get("cv_face_area_share"),
+                    "central_face": candidate.get("cv_central_face"),
+                    "marketing_cues": candidate.get("cv_marketing_cues", []),
+                    "scope": "thumbnail",
+                },
                 "provenance": candidate.get("provenance"),
             }
         )
@@ -333,7 +380,10 @@ def _validate_review_packet_snapshot(packet_path, *, artifacts_root):
     if packet_candidates != expected_candidates:
         raise ReviewValidationError("Packet candidate summary differs from frozen sources")
     counts = manifest.get("counts")
-    expected_count = len(expected_candidates)
+    all_candidate_ids = [
+        candidate.get("video_id") for candidate in candidates_document.get("candidates", [])
+    ]
+    expected_count = len(all_candidate_ids)
     count_values = (
         counts.get("candidates_scored") if isinstance(counts, dict) else None,
         counts.get("rows_written") if isinstance(counts, dict) else None,
@@ -349,7 +399,7 @@ def _validate_review_packet_snapshot(packet_path, *, artifacts_root):
         raise ReviewValidationError("Frozen dashboard snapshot is unreadable") from exc
     if "video_id" not in dashboard_frame.columns or dashboard_frame[
         "video_id"
-    ].tolist() != [candidate["candidate_id"] for candidate in expected_candidates]:
+    ].tolist() != all_candidate_ids:
         raise ReviewValidationError("Frozen dashboard candidate IDs differ")
     return packet, hashlib.sha256(packet_bytes).hexdigest()
 
@@ -530,7 +580,10 @@ def create_review_packet(*, runs_root, reviews_root, run_id, generated_at):
     counts = manifest.get("counts")
     if not isinstance(counts, dict):
         raise ReviewValidationError("Manifest counts must be an object")
-    expected_counts = [len(packet_candidates), len(packet_candidates)]
+    all_candidates = candidates_document.get("candidates")
+    if not isinstance(all_candidates, list):
+        raise ReviewValidationError("Candidate collection must be an array")
+    expected_counts = [len(all_candidates), len(all_candidates)]
     actual_counts = [counts.get("candidates_scored"), counts.get("rows_written")]
     if (
         not all(_is_non_negative_int(value) for value in actual_counts)
@@ -544,7 +597,7 @@ def create_review_packet(*, runs_root, reviews_root, run_id, generated_at):
     if "video_id" not in dashboard_frame.columns:
         raise ReviewValidationError("Dashboard snapshot is missing video IDs")
     if dashboard_frame["video_id"].tolist() != [
-        candidate["candidate_id"] for candidate in packet_candidates
+        candidate.get("video_id") for candidate in all_candidates
     ]:
         raise ReviewValidationError("Dashboard candidate IDs do not match the packet")
 

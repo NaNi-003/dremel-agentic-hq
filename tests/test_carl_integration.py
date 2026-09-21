@@ -43,6 +43,9 @@ def test_build_carl_prompt_contains_packet_and_exact_decision_contract():
     assert '"packet_sha256": "' + ("b" * 64) + '"' in prompt
     assert '"decision": "approve | reject | needs_evidence"' in prompt
     assert 'exactly [] or ["partial_collection"]' in prompt
+    assert "research analyst" in prompt
+    assert "titles, descriptions, publication timing, views, and comment counts" in prompt
+    assert "contrary signals" in prompt
     assert "Return only the JSON object" in prompt
 
 

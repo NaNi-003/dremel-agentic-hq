@@ -47,7 +47,9 @@ def _json_safe_rows(dataframe):
     return json.loads(json.dumps(records, allow_nan=False))
 
 
-def build_static_dashboard(output_dir, *, rows, brief, run_context, source_dir=DEFAULT_SOURCE_DIR):
+def build_static_dashboard(
+    output_dir, *, rows, brief, run_context, briefs=None, source_dir=DEFAULT_SOURCE_DIR
+):
     """Build a dependency-free static copy of the original dashboard UI."""
     output_dir = Path(output_dir)
     source_dir = Path(source_dir)
@@ -70,10 +72,25 @@ def build_static_dashboard(output_dir, *, rows, brief, run_context, source_dir=D
         and brief.get("candidate_id") in candidate_ids
     ):
         brief = None
+    primary_ids = {row.get("video_id") for row in rows[:15]}
+    briefs = briefs if isinstance(briefs, dict) else {}
+    briefs = {
+        candidate_id: artifact
+        for candidate_id, artifact in briefs.items()
+        if candidate_id in primary_ids
+        and isinstance(artifact, dict)
+        and artifact.get("run_id") == run_context.get("run_id")
+        and artifact.get("candidate_id") == candidate_id
+    }
 
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    payload = {"run": run_context, "rows": rows, "maya_brief": brief}
+    payload = {
+        "run": run_context,
+        "rows": rows,
+        "maya_brief": brief,
+        "maya_briefs": briefs,
+    }
     (data_dir / "dashboard.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
@@ -90,7 +107,14 @@ def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_A
             dataframe["source_url"] = dataframe["video_id"].map(context["source_urls"])
         run = {
             key: context[key]
-            for key in ("run_id", "collected_at", "status", "partial_failure_count")
+            for key in (
+                "run_id",
+                "collected_at",
+                "status",
+                "partial_failure_count",
+                "videos_collected",
+                "candidates_scored",
+            )
         }
         brief = dashboard_content.load_maya_brief(artifacts_root, context["run_id"])
         return _json_safe_rows(dataframe), brief, run
@@ -106,6 +130,8 @@ def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_A
         "collected_at": None,
         "status": "legacy",
         "partial_failure_count": 0,
+        "videos_collected": len(dataframe),
+        "candidates_scored": len(dataframe),
     }
 
 
@@ -114,7 +140,18 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args(argv)
     rows, brief, run = load_dashboard_payload()
-    output = build_static_dashboard(args.output, rows=rows, brief=brief, run_context=run)
+    briefs = (
+        dashboard_content.load_maya_briefs(DEFAULT_ARTIFACTS_ROOT, run["run_id"])
+        if run.get("run_id")
+        else {}
+    )
+    output = build_static_dashboard(
+        args.output,
+        rows=rows,
+        brief=brief,
+        briefs=briefs,
+        run_context=run,
+    )
     print(json.dumps({"status": "built", "output": str(output.resolve()), "rows": len(rows)}))
     return 0
 

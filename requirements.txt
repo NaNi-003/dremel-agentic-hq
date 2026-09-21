@@ -1,7 +1,11 @@
 pandas==2.3.3
+numpy==2.2.6
+Pillow==12.3.0
+opencv-python==5.0.0.93
 spacy==3.8.14
 google-api-python-client==2.197.0
 youtube-transcript-api==1.2.4
+vaderSentiment==3.3.2
 colorthief==0.2.1
 requests==2.34.2
 streamlit==1.58.0

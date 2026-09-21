@@ -11,6 +11,7 @@ import pandas as pd
 from filelock import FileLock, Timeout
 
 import channel_finder
+import comment_analysis
 import cv_layer
 import nlp_engine
 import run_artifacts
@@ -181,6 +182,37 @@ def scrape_channel_videos_with_diagnostics(target_channels, max_results=5):
     return StageResult(items=raw_data, failures=failures)
 
 
+def enrich_primary_comments_with_diagnostics(
+    raw_data,
+    primary_video_ids,
+    max_results=100,
+    get_comments_fn=None,
+):
+    """Collect one bounded comment sample for primary candidates only."""
+    get_comments_fn = get_comments_fn or scraper.get_video_comments
+    primary_video_ids = set(primary_video_ids)
+    enriched = [dict(video) for video in raw_data]
+    failures = []
+    for video in enriched:
+        video_id = video.get("video_id")
+        if video_id not in primary_video_ids:
+            continue
+        try:
+            comments = get_comments_fn(video_id, max_results=max_results)
+        except Exception as exc:
+            comments = []
+            failures.append(
+                {
+                    "stage": "comment_collection",
+                    "source": video_id,
+                    "error": _sanitize_error_text(exc),
+                }
+            )
+        video["comment_sample"] = comments
+        video["comment_sentiment"] = comment_analysis.analyze_comments(comments)
+    return StageResult(items=enriched, failures=failures)
+
+
 def scrape_channel_videos(target_channels, max_results=5):
     return scrape_channel_videos_with_diagnostics(
         target_channels,
@@ -214,6 +246,38 @@ def keep_top_unique_rows(final_df, limit=10):
         return final_df
     deduped = final_df.drop_duplicates(subset=["video_id"])
     return deduped.head(limit)
+
+
+def prepare_ranked_candidates(
+    structured_df,
+    visual_analysis_fn,
+    *,
+    primary_limit=15,
+    total_limit=50,
+):
+    """Deeply enrich primary candidates and retain lighter secondary results."""
+    if structured_df.empty:
+        return structured_df
+    ranked = (
+        structured_df.drop_duplicates(subset=["video_id"])
+        .head(total_limit)
+        .copy()
+    )
+    primary = visual_analysis_fn(ranked, top_n=min(primary_limit, len(ranked))).copy()
+    primary["candidate_tier"] = "primary"
+    if primary.empty:
+        return primary
+
+    secondary = ranked.iloc[len(primary):].copy()
+    if not secondary.empty:
+        secondary["cv_color_hex"] = "#cccccc"
+        secondary["cv_emotion"] = "Not analyzed"
+        secondary["cv_method"] = "not_analyzed_secondary"
+        secondary["candidate_tier"] = "secondary"
+
+    candidates = pd.concat([primary, secondary], ignore_index=True)
+    candidates["candidate_rank"] = range(1, len(candidates) + 1)
+    return candidates
 
 
 def write_csv_atomically(final_df, output_path):
@@ -387,6 +451,7 @@ def _run_pipeline_impl(
     scrape_videos_fn,
     process_data_fn,
     visual_analysis_fn,
+    comment_enrichment_fn,
     progress,
     run_id,
     run_dir,
@@ -428,7 +493,6 @@ def _run_pipeline_impl(
 
     if not structured_df.empty:
         structured_df = structured_df.drop_duplicates(subset=["video_id"])
-        structured_df = structured_df.head(10)
 
     if structured_df.empty:
         generated_at = run_artifacts.isoformat_utc(clock())
@@ -463,9 +527,22 @@ def _run_pipeline_impl(
         )
 
     print(f"Isolated {len(structured_df)} unique, high-velocity surface trends.")
-    analyzed_df = visual_analysis_fn(structured_df, top_n=10)
-    candidate_df = keep_top_unique_rows(analyzed_df, limit=10)
+    candidate_df = prepare_ranked_candidates(structured_df, visual_analysis_fn)
     progress["candidates_scored"] = len(candidate_df)
+    primary_ids = candidate_df.loc[
+        candidate_df["candidate_tier"] == "primary", "video_id"
+    ].tolist()
+    raw_data = _unwrap_stage_result(
+        comment_enrichment_fn(raw_data, primary_ids, max_results=100),
+        partial_failures,
+    )
+    evidence = run_artifacts.build_evidence_document(
+        run_id,
+        target_channels,
+        raw_data,
+        collected_at,
+    )
+    run_artifacts.write_json_atomically(evidence, paths["evidence"])
     generated_at = run_artifacts.isoformat_utc(clock())
     candidates = run_artifacts.build_candidates_document(
         run_id,
@@ -529,6 +606,7 @@ def run_pipeline(
     scrape_videos_fn=None,
     process_data_fn=None,
     visual_analysis_fn=None,
+    comment_enrichment_fn=None,
     runs_root="artifacts/runs",
     run_id=None,
     clock=None,
@@ -585,9 +663,16 @@ def run_pipeline(
     discover_channels_fn = (
         discover_channels_fn or discover_target_channels_with_diagnostics
     )
+    custom_scrape = scrape_videos_fn is not None
     scrape_videos_fn = scrape_videos_fn or scrape_channel_videos_with_diagnostics
     process_data_fn = process_data_fn or nlp_engine.process_and_score_data
     visual_analysis_fn = visual_analysis_fn or cv_layer.run_visual_analysis
+    if comment_enrichment_fn is None:
+        comment_enrichment_fn = (
+            (lambda videos, primary_ids, max_results: StageResult(videos, []))
+            if custom_scrape
+            else enrich_primary_comments_with_diagnostics
+        )
     progress = {
         "channels_discovered": 0,
         "videos_collected": 0,
@@ -630,6 +715,7 @@ def run_pipeline(
             scrape_videos_fn=scrape_videos_fn,
             process_data_fn=process_data_fn,
             visual_analysis_fn=visual_analysis_fn,
+            comment_enrichment_fn=comment_enrichment_fn,
             progress=progress,
             run_id=resolved_run_id,
             run_dir=run_dir,

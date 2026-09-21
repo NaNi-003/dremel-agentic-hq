@@ -70,3 +70,44 @@ def get_video_transcript(video_id):
     except Exception as exc:
         # Surface transcript errors to the caller so they can decide how to handle
         raise RuntimeError(f"Transcript error for video {video_id}: {exc}") from exc
+
+
+def get_video_comments(video_id, max_results=100, youtube_client=None):
+    """Collect a bounded, privacy-minimised sample of top-level comments."""
+    if max_results < 1:
+        return []
+    youtube = youtube_client or create_youtube_client()
+    comments = []
+    page_token = None
+    while len(comments) < max_results:
+        request = {
+            "part": "snippet",
+            "videoId": video_id,
+            "maxResults": min(100, max_results - len(comments)),
+            "order": "relevance",
+            "textFormat": "plainText",
+        }
+        if page_token:
+            request["pageToken"] = page_token
+        response = youtube.commentThreads().list(**request).execute()
+        for item in response.get("items", []):
+            snippet = (
+                item.get("snippet", {})
+                .get("topLevelComment", {})
+                .get("snippet", {})
+            )
+            text = snippet.get("textDisplay", "")
+            if isinstance(text, str) and text.strip():
+                comments.append(
+                    {
+                        "text": text.strip(),
+                        "like_count": int(snippet.get("likeCount", 0)),
+                        "published_at": snippet.get("publishedAt"),
+                    }
+                )
+                if len(comments) >= max_results:
+                    break
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+    return comments

@@ -63,10 +63,11 @@
       <p class="caption">Verify the exact thumbnail, NLP action pair, and velocity score for every isolated trend.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Visual Context</th><th>Detected Action</th><th>Velocity Score</th><th>Emotional Trigger</th><th>Palette</th><th>Source video</th></tr></thead>
+          <thead><tr><th>Visual Context</th><th>Detected Action</th><th>Velocity Score</th><th>Thumbnail Signals</th><th>Palette</th><th>Source video</th></tr></thead>
           <tbody id="feed-body"></tbody>
         </table>
       </div>
+      <button id="load-more" class="load-more hidden" type="button">Show 10 more</button>
     </section>
 
     <section id="roi" class="panel">
@@ -87,9 +88,12 @@
           <label>Base Tool Margin (£) <output id="margin-output"></output><input id="margin" type="range" min="10" max="100" value="35" step="5"></label>
           <label>Influencer Promo Code Discount (%) <output id="discount-output"></output><input id="discount" type="range" min="0" max="30" value="10" step="5"></label>
           <label class="toggle-row"><input id="clv" type="checkbox"> Include Year 1 Accessory CLV (+£15/unit)</label>
+          <h4>4. Marketing Availability Guardrail</h4>
+          <label>Available Units for This Campaign<input id="inventory" type="number" min="0" value="10000" step="100" inputmode="numeric"></label>
         </form>
         <div class="roi-results">
           <h4>Projected Outcomes</h4>
+          <div id="inventory-warning" class="notice warning hidden"></div>
           <div id="roi-kpis" class="roi-kpis"></div>
           <div id="roi-takeaway" class="notice info"></div>
         </div>
