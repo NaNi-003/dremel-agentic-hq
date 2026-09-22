@@ -62,10 +62,17 @@
 
     <section id="matrix" class="panel">
       <h2>Market Positioning Matrix</h2>
+      <p class="caption">Compare opportunity rank and market velocity. Hover or focus a point for details; select a primary opportunity to open its campaign studio.</p>
+      <div class="chart-toolbar" aria-label="Matrix display controls">
+        <span>Display</span>
+        <button class="chart-filter active" type="button" data-chart-scope="primary">Top 15</button>
+        <button class="chart-filter" type="button" data-chart-scope="all">All 50</button>
+      </div>
       <div class="chart-shell">
         <div class="chart-y-label">Market Growth (Velocity Score)</div>
         <svg id="matrix-chart" role="img" aria-label="Trend market positioning scatter plot"></svg>
-        <div class="chart-x-label">Market Share (Estimated Engagement)</div>
+        <div id="chart-tooltip" class="chart-tooltip hidden" role="status" aria-live="polite"></div>
+        <div class="chart-x-label">Opportunity Rank</div>
       </div>
       <div id="legend" class="legend"></div>
     </section>

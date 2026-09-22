@@ -1,6 +1,6 @@
 "use strict";
 
-const state = { data: null, selectedIndex: 0, briefOpen: false, visibleRows: 15 };
+const state = { data: null, selectedIndex: 0, briefOpen: false, visibleRows: 15, chartScope: "primary" };
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[ch]);
 const titleCase = (value) => String(value ?? "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -121,24 +121,75 @@ function renderBrief() {
 
 function renderChart() {
   const svg = $("matrix-chart");
-  const rows = state.data.rows;
-  const width = 1000, height = 410, pad = 38;
+  const rows = state.chartScope === "primary" ? state.data.rows.slice(0, 15) : state.data.rows;
+  const width = 1000, height = 430, left = 74, right = 28, top = 28, bottom = 52;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const maxVelocity = Math.max(...rows.map((row) => number(row.velocity_score)), 1);
-  const emotions = [...new Set(rows.map((row) => row.cv_emotion))];
-  const colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc949"];
-  const colorFor = (emotion) => colors[emotions.indexOf(emotion) % colors.length];
-  const grid = [0, .25, .5, .75, 1].map((part) => {
-    const y = height - pad - part * (height - pad * 2);
-    return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="#e6ebf0"/><text x="${pad - 8}" y="${y + 4}" text-anchor="end" font-size="12" fill="#69727d">${Math.round(maxVelocity * part)}</text>`;
+  const plotW = width - left - right, plotH = height - top - bottom;
+  const yGrid = [0, .25, .5, .75, 1].map((part) => {
+    const y = top + (1 - part) * plotH;
+    return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" class="chart-grid"/><text x="${left-12}" y="${y+4}" text-anchor="end" class="chart-tick">${fmt.format(Math.round(maxVelocity * part))}</text>`;
   }).join("");
-  const points = rows.map((row, index) => {
-    const x = pad + ((number(row.velocity_score) * 14) / (maxVelocity * 14)) * (width - pad * 2);
-    const y = height - pad - (number(row.velocity_score) / maxVelocity) * (height - pad * 2);
-    return `<circle cx="${x}" cy="${y}" r="12" fill="${colorFor(row.cv_emotion)}" fill-opacity=".9"><title>${escapeHtml(row.action_pair)} · ${row.velocity_score} · ${escapeHtml(row.cv_emotion)}</title></circle>`;
+  const tickRanks = state.chartScope === "primary" ? [1, 5, 10, 15] : [1, 10, 20, 30, 40, 50];
+  const xGrid = tickRanks.map((rank) => {
+    const x = left + ((rank - 1) / Math.max(rows.length - 1, 1)) * plotW;
+    return `<line x1="${x}" y1="${top}" x2="${x}" y2="${height-bottom}" class="chart-grid vertical"/><text x="${x}" y="${height-bottom+25}" text-anchor="middle" class="chart-tick">${rank}</text>`;
   }).join("");
-  svg.innerHTML = `${grid}<line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#8c96a1"/>${points}`;
-  $("legend").innerHTML = emotions.map((emotion) => `<span><i style="background:${colorFor(emotion)}"></i>${escapeHtml(emotion)}</span>`).join("");
+  const points = rows.map((row) => {
+    const index = state.data.rows.indexOf(row);
+    const rank = index + 1;
+    const localRank = rows.indexOf(row);
+    const x = left + (localRank / Math.max(rows.length - 1, 1)) * plotW;
+    const y = top + (1 - number(row.velocity_score) / maxVelocity) * plotH;
+    const tier = rank <= 15 ? "primary" : "secondary";
+    const selected = index === state.selectedIndex ? " selected" : "";
+    return `<circle class="matrix-point ${tier}${selected}" data-index="${index}" cx="${x}" cy="${y}" r="${rank <= 15 ? 9 : 6}" tabindex="0" role="button" aria-label="Rank ${rank}, ${escapeHtml(row.action_pair)}, velocity ${number(row.velocity_score).toFixed(2)}"></circle>`;
+  }).join("");
+  svg.innerHTML = `<rect x="${left}" y="${top}" width="${plotW}" height="${plotH}" class="chart-plot"></rect>${yGrid}${xGrid}<line x1="${left}" y1="${height-bottom}" x2="${width-right}" y2="${height-bottom}" class="chart-axis"/>${points}`;
+  $("legend").innerHTML = '<span><i class="legend-primary"></i>Primary opportunity</span><span><i class="legend-secondary"></i>Secondary candidate</span><span><i class="legend-selected"></i>Selected</span>';
+  bindChartInteractions();
+}
+
+function bindChartInteractions() {
+  const tooltip = $("chart-tooltip");
+  const shell = tooltip.parentElement;
+  const show = (point) => {
+    const index = number(point.dataset.index);
+    const row = state.data.rows[index];
+    const box = point.getBoundingClientRect();
+    const shellBox = shell.getBoundingClientRect();
+    tooltip.innerHTML = `<strong>${escapeHtml(titleCase(row.action_pair))}</strong><span>Rank ${index + 1} · ${number(row.velocity_score).toFixed(2)} V/d</span><small>${index < 15 ? "Select to open campaign studio" : "Secondary candidate"}</small>`;
+    tooltip.style.left = `${Math.min(Math.max(box.left - shellBox.left, 110), shellBox.width - 130)}px`;
+    tooltip.style.top = `${Math.max(box.top - shellBox.top - 82, 8)}px`;
+    tooltip.classList.remove("hidden");
+  };
+  const hide = () => tooltip.classList.add("hidden");
+  document.querySelectorAll(".matrix-point").forEach((point) => {
+    point.addEventListener("mouseenter", () => show(point));
+    point.addEventListener("focus", () => show(point));
+    point.addEventListener("mouseleave", hide);
+    point.addEventListener("blur", hide);
+    point.addEventListener("click", () => {
+      const index = number(point.dataset.index);
+      if (index >= 15) return;
+      state.selectedIndex = index;
+      state.briefOpen = false;
+      $("trend-select").value = String(index);
+      renderBrief();
+      renderChart();
+      document.querySelector('[data-tab="ideation"]').click();
+    });
+    point.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); point.click(); }
+    });
+  });
+  document.querySelectorAll(".chart-filter").forEach((button) => {
+    button.onclick = () => {
+      state.chartScope = button.dataset.chartScope;
+      document.querySelectorAll(".chart-filter").forEach((item) => item.classList.toggle("active", item === button));
+      renderChart();
+    };
+  });
 }
 
 function renderFeed() {
