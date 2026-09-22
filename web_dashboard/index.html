@@ -10,7 +10,7 @@
 <body>
   <aside class="sidebar">
     <img class="brand-logo" src="assets/dremel_logo.png" alt="Dremel">
-    <h2>🎛️ Strategy Controls</h2>
+    <h2>Marketing Strategy Controls</h2>
     <div class="rule"></div>
     <label class="field-label" for="trend-select">1. Select Target Market Trend</label>
     <span class="field-note">Active Signals:</span>
@@ -19,16 +19,16 @@
     <button id="brief-button" type="button">Open Content Brief</button>
     <div class="rule status-rule"></div>
     <div class="status-list">
-      <span>🟢 Engine Status: ONLINE</span>
-      <span>🧠 Content Specialist: Maya</span>
-      <span>📍 Market Target: UK Region</span>
+      <span><i class="status-dot"></i>Engine online</span>
+      <span>Content specialist: Maya</span>
+      <span>Market target: UK region</span>
     </div>
   </aside>
 
   <main class="main">
     <header>
       <h1>Predictive Trend Engine</h1>
-      <p class="subtitle">Multimodal Intelligence &amp; Neuromarketing Pipeline</p>
+      <p class="subtitle">Marketing opportunity intelligence for evidence-led campaign planning</p>
       <p id="run-caption" class="caption"></p>
       <div id="run-warning" class="notice warning hidden"></div>
     </header>
@@ -36,20 +36,32 @@
     <section id="kpis" class="kpi-grid" aria-label="Key performance indicators"></section>
 
     <nav class="tabs" aria-label="Dashboard sections">
-      <button class="tab active" data-tab="ideation">🤖 Autonomous Content Ideation</button>
-      <button class="tab" data-tab="matrix">📊 Trend Lifecycle Matrix</button>
-      <button class="tab" data-tab="feed">🔍 Raw Intelligence Feed</button>
-      <button class="tab" data-tab="roi">🧮 Campaign ROI Estimator</button>
+      <button class="tab active" data-tab="ideation">Autonomous Content Ideation</button>
+      <button class="tab" data-tab="matrix">Trend Lifecycle Matrix</button>
+      <button class="tab" data-tab="feed">Intelligence Feed</button>
+      <button class="tab" data-tab="roi">Campaign ROI Estimator</button>
     </nav>
 
-    <section id="ideation" class="panel active">
-      <h3>Agentic Strategy Deployment</h3>
-      <p class="caption">Select a validated trend from the sidebar to deploy an Information Gap brief.</p>
-      <div id="brief-content" class="brief-content"></div>
+    <section id="ideation" class="panel active studio-panel">
+      <div class="studio-heading">
+        <div><h2>Campaign Opportunity Studio</h2><p>Turn a validated market signal into a focused, evidence-backed creative direction.</p></div>
+        <span class="studio-badge">Top 15 briefs ready</span>
+      </div>
+      <div class="studio-stage">
+        <aside class="studio-guide">
+          <span class="guide-step">Select</span>
+          <h4>Choose a primary opportunity</h4>
+          <p>Use Strategy Controls to switch between the fifteen highest-ranked campaign territories.</p>
+          <span class="guide-step">Develop</span>
+          <h4>Open Maya’s brief</h4>
+          <p>Review the information gap, hook system, key beats, product role, and success metrics.</p>
+        </aside>
+        <div id="brief-content" class="brief-content"></div>
+      </div>
     </section>
 
     <section id="matrix" class="panel">
-      <h3>Market Positioning Matrix</h3>
+      <h2>Market Positioning Matrix</h2>
       <div class="chart-shell">
         <div class="chart-y-label">Market Growth (Velocity Score)</div>
         <svg id="matrix-chart" role="img" aria-label="Trend market positioning scatter plot"></svg>
@@ -59,11 +71,11 @@
     </section>
 
     <section id="feed" class="panel">
-      <h3>Auditable Intelligence Feed</h3>
+      <h2>Auditable Intelligence Feed</h2>
       <p class="caption">Verify the exact thumbnail, NLP action pair, and velocity score for every isolated trend.</p>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Visual Context</th><th>Detected Action</th><th>Velocity Score</th><th>Thumbnail Signals</th><th>Palette</th><th>Source video</th></tr></thead>
+          <thead><tr><th>Visual Context</th><th>Detected Action</th><th>Velocity Score</th><th>Thumbnail Signals</th><th>Palette</th><th>Viewer Sentiment</th><th>Source video</th></tr></thead>
           <tbody id="feed-body"></tbody>
         </table>
       </div>
@@ -71,7 +83,7 @@
     </section>
 
     <section id="roi" class="panel">
-      <h3>Financial Feasibility &amp; ROI Projections</h3>
+      <h2>Financial Feasibility &amp; ROI Projections</h2>
       <p class="caption">Model the fully burdened financial impact, accounting for traffic funnels, promo discounts, and fixed seeding costs.</p>
       <div class="roi-layout">
         <form id="roi-form" class="roi-controls">

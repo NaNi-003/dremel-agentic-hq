@@ -62,10 +62,10 @@ function populateSelectors() {
 function renderKpis() {
   const top = state.data.rows[0];
   const items = [
-    ["🔥 Top Emerging Trend", titleCase(top.action_pair), ""],
-    ["📈 Peak Velocity", `${top.velocity_score} V/d`, "Accelerating"],
-    ["🎬 Videos Scraped", number(state.data.run?.videos_collected) || state.data.rows.length, ""],
-    ["📡 Ranked Opportunities", number(state.data.run?.candidates_scored) || state.data.rows.length, ""],
+    ["Top Emerging Trend", titleCase(top.action_pair), ""],
+    ["Peak Velocity", `${top.velocity_score} V/d`, "Accelerating"],
+    ["Videos Assessed", number(state.data.run?.videos_collected) || state.data.rows.length, ""],
+    ["Ranked Opportunities", number(state.data.run?.candidates_scored) || state.data.rows.length, ""],
   ];
   $("kpis").innerHTML = items.map(([label, value, delta]) => `
     <article class="kpi-card"><span class="kpi-label">${escapeHtml(label)}</span><strong class="kpi-value">${escapeHtml(value)}</strong>${delta ? `<span class="kpi-delta">↗ ${escapeHtml(delta)}</span>` : ""}</article>
@@ -85,14 +85,15 @@ function renderBrief() {
   const artifact = matchingBrief();
   const button = $("brief-button");
   button.disabled = !artifact;
-  button.textContent = artifact ? "📝 Open Maya brief" : "📝 Maya brief unavailable";
+  button.textContent = artifact ? "Open Maya brief" : "Maya brief unavailable";
   button.title = artifact ? "Open Maya's saved brief" : "No validated Maya brief is available";
   if (!artifact) {
     $("brief-content").innerHTML = '<div class="notice info">Maya brief unavailable for this candidate.</div>';
     return;
   }
   if (!state.briefOpen) {
-    $("brief-content").innerHTML = '<div class="notice info">A Maya content brief is ready for this approved trend. Open it from the sidebar.</div>';
+    const selected = state.data.rows[state.selectedIndex];
+    $("brief-content").innerHTML = `<div class="brief-preview"><span class="preview-rank">Primary opportunity ${state.selectedIndex + 1} of 15</span><h2>${escapeHtml(titleCase(selected.action_pair))}</h2><p>Maya’s complete information-gap brief is ready. Open it to review the campaign concept, creative hooks, key beats, product role, and measurement plan.</p><button type="button" class="preview-action" onclick="document.getElementById('brief-button').click()">Open campaign brief</button></div>`;
     return;
   }
   const brief = artifact.brief;
@@ -114,7 +115,7 @@ function renderBrief() {
       <h4>Thumbnail Direction</h4><p>${escapeHtml(brief.thumbnail_direction)}</p>
       <h4>Call to Action</h4><p>${escapeHtml(brief.call_to_action)}</p>
       ${gap ? `<h4>Product Role</h4><p>${escapeHtml(brief.product_role)}</p><h4>Success Metrics</h4><ul>${brief.success_metrics.map((metric) => `<li>${escapeHtml(metric)}</li>`).join("")}</ul><h4>Claims Guardrails</h4><p>${escapeHtml(brief.claims_guardrails)}</p>` : ""}
-      <a class="download-link" download="Dremel_Brief_${escapeHtml(state.data.rows[state.selectedIndex].action_pair.replaceAll(" ", "_"))}.txt" href="${href}">📥 Download Brief for Marketing Team</a>
+      <a class="download-link" download="Dremel_Brief_${escapeHtml(state.data.rows[state.selectedIndex].action_pair.replaceAll(" ", "_"))}.txt" href="${href}">Download brief for marketing team</a>
     </article>`;
 }
 
@@ -148,11 +149,54 @@ function renderFeed() {
       <td><img class="thumb" src="${escapeHtml(row.thumbnail_url)}" alt="Thumbnail for ${escapeHtml(row.video_title || row.action_pair)}" loading="lazy"></td>
       <td>${escapeHtml(row.action_pair)}</td>
       <td>${number(row.velocity_score).toFixed(2)}<div class="progress"><i style="width:${Math.max(1, number(row.velocity_score) / max * 100)}%"></i></div></td>
-      <td>${escapeHtml(row.cv_emotion)}</td>
-      <td><span class="palette"><i style="background:${escapeHtml(row.cv_color_hex)}"></i>${escapeHtml(row.cv_color_hex)}</span></td>
+      <td>${thumbnailSignals(row)}</td>
+      <td>${paletteDisplay(row)}</td>
+      <td>${sentimentDisplay(row)}</td>
       <td>${row.source_url ? `<a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener">Open source ↗</a>` : "—"}</td>
     </tr>`).join("");
   $("load-more").classList.toggle("hidden", state.visibleRows >= state.data.rows.length);
+}
+
+function parsedList(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value.replaceAll("'", '"'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function thumbnailSignals(row) {
+  const lines = [];
+  const faces = number(row.cv_face_count);
+  if (faces) lines.push(`${faces} ${faces === 1 ? "face" : "faces"}: ${escapeHtml(row.cv_emotion || "expression unavailable")}`);
+  else lines.push(escapeHtml(row.cv_emotion || "No face detected"));
+  const tools = parsedList(row.cv_tools);
+  const objects = parsedList(row.cv_objects);
+  if (tools.length) lines.push(`<strong>Tools:</strong> ${tools.map(escapeHtml).join(", ")}`);
+  if (objects.length) lines.push(`<strong>Objects:</strong> ${objects.map(escapeHtml).join(", ")}`);
+  if (row.cv_color_temperature && row.cv_color_temperature !== "unavailable") lines.push(`${escapeHtml(titleCase(row.cv_color_temperature))} palette`);
+  if (number(row.cv_contrast) >= 0.55) lines.push("High contrast");
+  if (number(row.cv_saturation) >= 0.55) lines.push("Vivid saturation");
+  if (row.cv_visual_clutter && row.cv_visual_clutter !== "unavailable") lines.push(`${escapeHtml(titleCase(row.cv_visual_clutter))} visual density`);
+  return lines.join("<br>");
+}
+
+function paletteDisplay(row) {
+  const colors = parsedList(row.cv_palette).filter((color) => /^#[0-9a-f]{6}$/i.test(color));
+  const palette = colors.length ? colors : [row.cv_color_hex];
+  return palette.map((color) => `<span class="palette"><i style="background:${escapeHtml(color)}"></i>${escapeHtml(color)}</span>`).join(" ");
+}
+
+function sentimentDisplay(row) {
+  const label = escapeHtml(row.viewer_sentiment || "Unavailable");
+  const sample = number(row.viewer_comments_sampled);
+  if (!sample) return `${label}<br><small>No usable comment sample</small>`;
+  const score = Number(row.viewer_sentiment_score);
+  const details = Number.isFinite(score) ? `score ${score.toFixed(2)}` : "score unavailable";
+  return `<strong>${label}</strong><br><small>${details} · ${fmt.format(sample)} comments · ${escapeHtml(row.viewer_sentiment_confidence || "unavailable")} confidence</small>`;
 }
 
 function bindRoi() {
