@@ -8,7 +8,7 @@ const number = (value) => Number(value) || 0;
 const fmt = new Intl.NumberFormat("en-GB");
 
 async function loadDashboard() {
-  const response = await fetch("data/dashboard.json", { cache: "no-store" });
+  const response = await fetch("data/dashboard.json?v=20260921T204508Z-6879fa8c", { cache: "no-store" });
   if (!response.ok) throw new Error(`Dashboard data could not be loaded (${response.status}).`);
   const payload = await response.json();
   if (!Array.isArray(payload.rows) || payload.rows.length === 0) throw new Error("The published research dataset is empty.");
