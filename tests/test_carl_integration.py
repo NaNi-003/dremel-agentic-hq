@@ -111,6 +111,60 @@ def test_request_carl_review_validates_invokes_and_records(tmp_path, monkeypatch
     assert result == {"decision": decision, "decision_path": recorded_path}
 
 
+def test_request_carl_review_binds_approval_citations_to_selected_candidate(
+    tmp_path, monkeypatch
+):
+    packet_path = tmp_path / "reviews" / "run-1" / "review_packet.json"
+    packet_path.parent.mkdir(parents=True)
+    packet_path.write_text("{}", encoding="utf-8")
+    packet = {
+        "run_id": "run-1",
+        "candidates": [
+            {"candidate_id": "video-1", "evidence_refs": ["evidence.json#/videos/1"]},
+            {"candidate_id": "video-2", "evidence_refs": ["evidence.json#/videos/2"]},
+        ],
+    }
+    proposed = {
+        "schema_version": 1,
+        "run_id": "run-1",
+        "packet_sha256": "d" * 64,
+        "reviewer": "carl",
+        "decision": "approve",
+        "selected_candidate_id": "video-1",
+        "rationale": "Video one is stronger after comparison.",
+        "evidence_citations": ["evidence.json#/videos/2"],
+        "risk_acknowledgements": [],
+        "reviewed_at": "2026-09-21T20:55:00Z",
+        "external_actions_authorized": False,
+    }
+    observed = {}
+    monkeypatch.setattr(
+        carl_integration.phase3_review,
+        "validate_review_packet",
+        lambda path, *, artifacts_root: packet,
+    )
+    monkeypatch.setattr(
+        carl_integration.phase3_review,
+        "review_packet_sha256",
+        lambda path: "d" * 64,
+    )
+    monkeypatch.setattr(
+        carl_integration.phase3_review,
+        "record_review_decision",
+        lambda decision, **kwargs: observed.setdefault("decision", decision)
+        and packet_path.with_name("review_decision.json"),
+    )
+
+    result = carl_integration.request_carl_review(
+        packet_path=packet_path,
+        artifacts_root=tmp_path,
+        invoke=lambda prompt: json.dumps(proposed),
+    )
+
+    assert observed["decision"]["evidence_citations"] == ["evidence.json#/videos/1"]
+    assert result["decision"]["evidence_citations"] == ["evidence.json#/videos/1"]
+
+
 def test_invoke_carl_profile_uses_named_hermes_profile(monkeypatch):
     observed = {}
 

@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import dashboard_content
@@ -228,7 +229,7 @@ def request_maya_brief(
     return {"brief": artifact, "brief_path": brief_path}
 
 
-def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
+def request_primary_briefs(*, packet_path, artifacts_root, invoke=None, max_workers=3):
     """Create one contract-validated Maya brief for every primary candidate."""
     packet_path = Path(packet_path).resolve()
     packet = phase3_review.validate_review_packet(
@@ -242,6 +243,7 @@ def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
     saved = dashboard_content.load_maya_briefs(artifacts_root, packet["run_id"])
     briefs = {}
     briefs_dir = (packet_path.parent / "maya_briefs").resolve()
+    validated = []
     for candidate in candidates:
         candidate_id = candidate["candidate_id"]
         if (
@@ -253,6 +255,10 @@ def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
         brief_path = (briefs_dir / f"{candidate_id}.json").resolve()
         if brief_path.parent != briefs_dir:
             raise MayaIntegrationError("Candidate ID escapes the brief artifact directory")
+        validated.append((candidate, candidate_id, brief_path))
+
+    pending = []
+    for candidate, candidate_id, brief_path in validated:
         existing = saved.get(candidate_id)
         if (
             isinstance(existing, dict)
@@ -260,6 +266,10 @@ def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
         ):
             briefs[candidate_id] = existing
             continue
+        pending.append((candidate, candidate_id, brief_path))
+
+    def generate_brief(item):
+        candidate, candidate_id, brief_path = item
         decision = {
             "decision": "approve",
             "selected_candidate_id": candidate_id,
@@ -286,7 +296,13 @@ def request_primary_briefs(*, packet_path, artifacts_root, invoke=None):
             "brief": brief,
         }
         run_artifacts.write_json_atomically(artifact, brief_path)
-        briefs[candidate_id] = artifact
+        return candidate_id, artifact
+
+    if pending:
+        workers = min(max(int(max_workers), 1), 3, len(pending))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for candidate_id, artifact in executor.map(generate_brief, pending):
+                briefs[candidate_id] = artifact
 
     return {
         "run_id": packet["run_id"],

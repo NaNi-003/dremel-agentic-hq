@@ -215,6 +215,35 @@ def test_request_primary_briefs_rejects_unsafe_candidate_filename(
     assert packet_path.read_text(encoding="utf-8") == "original"
 
 
+def test_request_primary_briefs_validates_entire_batch_before_invoking_maya(
+    tmp_path, monkeypatch
+):
+    packet_path = tmp_path / "reviews" / "run-1" / "review_packet.json"
+    packet_path.parent.mkdir(parents=True)
+    packet_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        maya_integration.phase3_review,
+        "validate_review_packet",
+        lambda path, *, artifacts_root: {
+            "run_id": "run-1",
+            "candidates": [
+                {"candidate_id": "safe-video", "evidence_refs": []},
+                {"candidate_id": "../unsafe", "evidence_refs": []},
+            ],
+        },
+    )
+    calls = []
+
+    with pytest.raises(maya_integration.MayaIntegrationError, match="Candidate ID"):
+        maya_integration.request_primary_briefs(
+            packet_path=packet_path,
+            artifacts_root=tmp_path,
+            invoke=lambda prompt: calls.append(prompt) or json.dumps(VALID_BRIEF),
+        )
+
+    assert calls == []
+
+
 def test_invoke_maya_profile_uses_named_hermes_profile(monkeypatch):
     observed = {}
 
