@@ -8,7 +8,7 @@ const number = (value) => Number(value) || 0;
 const fmt = new Intl.NumberFormat("en-GB");
 
 async function loadDashboard() {
-  const response = await fetch("data/dashboard.json?v=20260921T204508Z-6879fa8c", { cache: "no-store" });
+  const response = await fetch("data/dashboard.json?v=__HQ_DASHBOARD_VERSION__", { cache: "no-store" });
   if (!response.ok) throw new Error(`Dashboard data could not be loaded (${response.status}).`);
   const payload = await response.json();
   if (!Array.isArray(payload.rows) || payload.rows.length === 0) throw new Error("The published research dataset is empty.");
@@ -63,7 +63,7 @@ function renderKpis() {
   const top = state.data.rows[0];
   const items = [
     ["Top Emerging Trend", titleCase(top.action_pair), ""],
-    ["Peak Velocity", `${top.velocity_score} V/d`, "Accelerating"],
+    ["Peak Velocity", `${top.velocity_score} V/d`, "Age-adjusted"],
     ["Videos Assessed", number(state.data.run?.videos_collected) || state.data.rows.length, ""],
     ["Ranked Opportunities", number(state.data.run?.candidates_scored) || state.data.rows.length, ""],
   ];
@@ -93,7 +93,7 @@ function renderBrief() {
   }
   if (!state.briefOpen) {
     const selected = state.data.rows[state.selectedIndex];
-    $("brief-content").innerHTML = `<div class="brief-preview"><span class="preview-rank">Primary opportunity ${state.selectedIndex + 1} of 15</span><h2>${escapeHtml(titleCase(selected.action_pair))}</h2><p>Maya’s complete information-gap brief is ready. Open it to review the campaign concept, creative hooks, key beats, product role, and measurement plan.</p><button type="button" class="preview-action" onclick="document.getElementById('brief-button').click()">Open campaign brief</button></div>`;
+    $("brief-content").innerHTML = `<div class="brief-preview"><span class="preview-rank">Primary opportunity ${state.selectedIndex + 1} of 15</span><h2>${escapeHtml(titleCase(selected.action_pair))}</h2><p>A saved creator brief is ready. Open it to review the campaign concept, hook, key beats, and thumbnail direction.</p><button type="button" class="preview-action" onclick="document.getElementById('brief-button').click()">Open campaign brief</button></div>`;
     return;
   }
   const brief = artifact.brief;

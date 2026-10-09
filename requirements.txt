@@ -8,8 +8,6 @@ youtube-transcript-api==1.2.4
 vaderSentiment==3.3.2
 colorthief==0.2.1
 requests==2.34.2
-streamlit==1.58.0
-altair==6.1.0
 python-dotenv==1.2.2
 google-genai==2.8.0
 filelock==3.32.7

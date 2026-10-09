@@ -1,4 +1,6 @@
-import sys
+import argparse
+from pathlib import Path
+
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -103,7 +105,9 @@ def create_docx(md_filepath, output_filepath):
     doc.save(output_filepath)
     print(f"Generated {output_filepath}")
 
-if __name__ == '__main__':
-    md_file = r"C:\Users\kiran\.gemini\antigravity\brain\17d9b803-c492-40b6-9883-ddca4d43bf1d\FINAL_REPORT_DRAFT.md"
-    out_file = r"C:\Users\kiran\Downloads\Dremel_Project_Phase0_1_Work\Dremel_Predictive_Trend_Engine_Documentation.docx"
-    create_docx(md_file, out_file)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Render a markdown file to docx.")
+    parser.add_argument("markdown", type=Path)
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args()
+    create_docx(args.markdown, args.output)

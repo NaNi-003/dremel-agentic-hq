@@ -102,7 +102,7 @@ def publish_site(site_dir, *, api_key, slug=None, session=None, timeout=60):
     headers = {
         "Authorization": f"Bearer {api_key.strip()}",
         "Content-Type": "application/json",
-        "X-HereNow-Client": "roxy/dremel-launch",
+        "X-HereNow-Client": "dremel-hq",
     }
     payload = {
         "files": files,
