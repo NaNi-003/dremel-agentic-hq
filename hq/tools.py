@@ -49,6 +49,7 @@ THUMBNAIL_NOTE = "Colour and expression labels are heuristics, not measured audi
 SCORE_NOTE = "Age-adjusted engagement score. Do not change it."
 EXCERPT_CHARS = 1200
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_CANDIDATE_ID = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$")
 _SKIPPED_THUMBNAIL_METHODS = {"", "unspecified", "not_analyzed_secondary"}
 
 
@@ -680,6 +681,10 @@ def _safe_id(value):
     return isinstance(value, str) and bool(_ID.fullmatch(value)) and ".." not in value
 
 
+def _safe_candidate_id(value):
+    return isinstance(value, str) and bool(_CANDIDATE_ID.fullmatch(value)) and ".." not in value
+
+
 def _parse_time(value):
     if not isinstance(value, str) or not value.strip():
         raise HqError("Collection time is missing")
@@ -724,11 +729,21 @@ def _reviews_dir(run):
 
 
 def _decision_path(run, candidate_id):
-    return _reviews_dir(run) / "decisions" / f"{candidate_id}.json"
+    return _candidate_artifact_path(run, "decisions", candidate_id)
 
 
 def _brief_path(run, candidate_id):
-    return _reviews_dir(run) / "briefs" / f"{candidate_id}.json"
+    return _candidate_artifact_path(run, "briefs", candidate_id)
+
+
+def _candidate_artifact_path(run, folder, candidate_id):
+    if not _safe_candidate_id(candidate_id):
+        raise HqError("Invalid candidate id")
+    directory = (_reviews_dir(run) / folder).resolve()
+    path = (directory / f"{candidate_id}.json").resolve()
+    if path.parent != directory:
+        raise HqError("Invalid candidate id")
+    return path
 
 
 def _ranked(run):
@@ -742,7 +757,7 @@ def _ranked(run):
 
 
 def _find_candidate(run, candidate_id):
-    if not _safe_id(candidate_id):
+    if not _safe_candidate_id(candidate_id):
         raise HqError("Invalid candidate id")
     matches = [item for item in run["candidates"] if item.get("video_id") == candidate_id]
     if not matches:
@@ -922,7 +937,7 @@ def _decision_map(run):
     known = {candidate["video_id"] for candidate in run["candidates"]}
     for path in sorted(directory.glob("*.json")):
         candidate_id = path.stem
-        if not _safe_id(candidate_id) or candidate_id not in known:
+        if not _safe_candidate_id(candidate_id) or candidate_id not in known:
             raise HqError(f"Unexpected decision file: {path.name}")
         found[candidate_id] = _load_decision_file(path, run["run_id"], candidate_id)
     return found
