@@ -16,7 +16,7 @@ Turn collected YouTube evidence into ranked marketing opportunities, candidate-s
 
 ## Positioning
 
-The product combines deterministic opportunity ranking with auditable evidence, bounded comparison analysis, and one professional Maya information-gap brief for every top-15 opportunity.
+The product combines deterministic opportunity ranking with auditable evidence. An analyst approves candidates, and creator briefs are saved only for those approvals.
 
 ## Operating Context
 
@@ -26,7 +26,7 @@ Users first scan portfolio-level opportunity signals, then inspect individual tr
 
 - Preserve deterministic ranking and expose the top 15 opportunities first.
 - Reveal secondary candidates progressively in groups of ten.
-- Keep all 15 primary Maya briefs directly accessible.
+- Show creator briefs for candidates an analyst has approved.
 - Preserve the original unconstrained ROI and add availability-constrained ROI only as a marketing scenario.
 - CV-1 remains thumbnail-only; CV-2 is out of scope.
 - Keep implementation static and compatible with here.now publication.

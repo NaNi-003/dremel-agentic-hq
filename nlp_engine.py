@@ -35,11 +35,40 @@ def _safe_int(value):
         return 0
 
 def _parse_publish_date(publish_str, video_id):
-    try:
-        return datetime.strptime(publish_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except Exception as exc:
-        logger.warning("Unable to parse publish_date '%s' for video_id=%s: %s", publish_str, video_id, exc)
+    """Parse a YouTube publish timestamp without changing the scoring clock.
+
+    The Data API sends RFC 3339 values such as ``2026-09-06T00:00:00.000Z``.
+    The previous parser accepted only whole-second ``Z`` timestamps, so those
+    videos were dropped before the score was calculated.
+    """
+    if not isinstance(publish_str, str):
+        logger.warning(
+            "Unable to parse publish_date '%s' for video_id=%s: not a string",
+            publish_str,
+            video_id,
+        )
         return None
+    text = publish_str.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        logger.warning(
+            "Unable to parse publish_date '%s' for video_id=%s: %s",
+            publish_str,
+            video_id,
+            exc,
+        )
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        logger.warning(
+            "Unable to parse publish_date '%s' for video_id=%s: missing timezone",
+            publish_str,
+            video_id,
+        )
+        return None
+    return parsed.astimezone(timezone.utc)
 
 def _find_fallback_noun(token):
     for noun_chunk in token.sent.noun_chunks:

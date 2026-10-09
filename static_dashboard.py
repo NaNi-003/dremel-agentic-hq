@@ -1,4 +1,3 @@
-import argparse
 import json
 import re
 import shutil
@@ -7,13 +6,11 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
-import dashboard_content
 import dashboard_evidence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_SOURCE_DIR = PROJECT_ROOT / "web_dashboard"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "dist" / "dashboard"
 DEFAULT_RUNS_ROOT = PROJECT_ROOT / "artifacts" / "runs"
 DEFAULT_ARTIFACTS_ROOT = PROJECT_ROOT / "artifacts"
 DEFAULT_LEGACY_OUTPUT = PROJECT_ROOT / "dremel_final_output.csv"
@@ -98,7 +95,28 @@ def build_static_dashboard(
         json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
+    _stamp_dashboard_version(output_dir, run_context)
     return output_dir
+
+
+def _stamp_dashboard_version(output_dir, run_context):
+    """Replace the template cache token so a rebuild is not pinned to one run."""
+    app_js = Path(output_dir) / "app.js"
+    if not app_js.is_file():
+        return
+    token = str(
+        (run_context or {}).get("collected_at")
+        or (run_context or {}).get("run_id")
+        or "build"
+    )
+    safe = re.sub(r"[^A-Za-z0-9_-]", "", token) or "build"
+    text = app_js.read_text(encoding="utf-8")
+    placeholder = "data/dashboard.json?v=__HQ_DASHBOARD_VERSION__"
+    if placeholder in text:
+        app_js.write_text(
+            text.replace(placeholder, f"data/dashboard.json?v={safe}", 1),
+            encoding="utf-8",
+        )
 
 
 def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_ARTIFACTS_ROOT):
@@ -119,8 +137,7 @@ def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_A
                 "candidates_scored",
             )
         }
-        brief = dashboard_content.load_maya_brief(artifacts_root, context["run_id"])
-        return _json_safe_rows(dataframe), brief, run
+        return _json_safe_rows(dataframe), None, run
 
     if dashboard_evidence.latest_pointer_exists(Path(runs_root)):
         raise RuntimeError("The latest evidence bundle failed validation")
@@ -139,24 +156,10 @@ def load_dashboard_payload(runs_root=DEFAULT_RUNS_ROOT, artifacts_root=DEFAULT_A
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Build the static Dremel dashboard")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
-    args = parser.parse_args(argv)
-    rows, brief, run = load_dashboard_payload()
-    briefs = (
-        dashboard_content.load_maya_briefs(DEFAULT_ARTIFACTS_ROOT, run["run_id"])
-        if run.get("run_id")
-        else {}
-    )
-    output = build_static_dashboard(
-        args.output,
-        rows=rows,
-        brief=brief,
-        briefs=briefs,
-        run_context=run,
-    )
-    print(json.dumps({"status": "built", "output": str(output.resolve()), "rows": len(rows)}))
-    return 0
+    """Delegate to the hq dashboard command so there is one build path."""
+    from hq.cli import main as hq_main
+
+    return hq_main(["dashboard", *list(argv or [])])
 
 
 if __name__ == "__main__":
