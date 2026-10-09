@@ -227,7 +227,7 @@ with tab2:
     scatter_chart = alt.Chart(df).mark_circle(size=250, opacity=0.9).encode(
         x=alt.X('total_engagement:Q', title='Market Share (Estimated Engagement)', axis=alt.Axis(labels=False, grid=False)),
         y=alt.Y('velocity_score:Q', title='Market Growth (Velocity Score)'),
-        color=alt.Color('cv_emotion:N', title="Emotional Trigger", scale=alt.Scale(scheme='tableau10')),
+        color=alt.Color('cv_emotion:N', title="Thumbnail Expression", scale=alt.Scale(scheme='tableau10')),
         tooltip=['action_pair', 'velocity_score', 'cv_emotion']
     ).interactive().properties(height=400)
 
@@ -237,7 +237,19 @@ with tab2:
 with tab3:
     st.markdown("#### Auditable Intelligence Feed")
     st.caption("Verify the exact thumbnail, NLP action pair, and velocity score for every isolated trend.")
-    evidence_columns = ['thumbnail_url', 'action_pair', 'velocity_score', 'cv_emotion', 'cv_color_hex']
+    evidence_columns = ['thumbnail_url', 'action_pair', 'velocity_score']
+    for optional_column in (
+        'cv_emotion',
+        'cv_palette',
+        'cv_color_temperature',
+        'cv_face_count',
+        'cv_objects',
+        'cv_tools',
+        'viewer_sentiment',
+        'viewer_comments_sampled',
+    ):
+        if optional_column in df.columns:
+            evidence_columns.append(optional_column)
     if "source_url" in df.columns:
         evidence_columns.append("source_url")
     st.dataframe(
@@ -251,8 +263,14 @@ with tab3:
                 min_value=0,
                 max_value=float(df['velocity_score'].max())
             ),
-            "cv_emotion": st.column_config.TextColumn("Emotional Trigger"),
-            "cv_color_hex": st.column_config.TextColumn("Palette"),
+            "cv_emotion": st.column_config.TextColumn("Facial Expression"),
+            "cv_palette": st.column_config.TextColumn("Color Palette"),
+            "cv_color_temperature": st.column_config.TextColumn("Color Direction"),
+            "cv_face_count": st.column_config.NumberColumn("Faces"),
+            "cv_objects": st.column_config.TextColumn("Objects"),
+            "cv_tools": st.column_config.TextColumn("Tools"),
+            "viewer_sentiment": st.column_config.TextColumn("Viewer Sentiment"),
+            "viewer_comments_sampled": st.column_config.NumberColumn("Comments Sampled"),
             "source_url": st.column_config.LinkColumn("Source video")
         },
         hide_index=True,

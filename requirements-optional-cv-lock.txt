@@ -228,7 +228,7 @@ numpy==2.2.6
     #   streamlit
     #   tensorflow
     #   thinc
-opencv-python==5.0.0.93
+opencv-python==4.10.0.84
     # via
     #   deepface
     #   retina-face

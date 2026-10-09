@@ -244,17 +244,27 @@ def test_request_primary_briefs_validates_entire_batch_before_invoking_maya(
     assert calls == []
 
 
-def test_invoke_maya_profile_uses_named_hermes_profile(monkeypatch):
+def test_invoke_maya_profile_uses_genai(monkeypatch):
     observed = {}
 
-    def fake_run(command, **kwargs):
-        observed["command"] = command
-        return SimpleNamespace(returncode=0, stdout=' {"title":"brief"}\n')
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            observed["model"] = model
+            observed["contents"] = contents
+            observed["config"] = config
+            return SimpleNamespace(text='{"title":"brief"}')
 
-    monkeypatch.setattr(maya_integration.subprocess, "run", fake_run)
+    class FakeClient:
+        def __init__(self, api_key):
+            observed["api_key"] = api_key
+            self.models = FakeModels()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "fake_key")
+    monkeypatch.setattr("google.genai.Client", FakeClient)
 
     response = maya_integration.invoke_maya_profile("create brief", profile="maya")
 
-    assert observed["command"][0:3] == ["hermes", "-p", "maya"]
-    assert observed["command"][-2:] == ["--oneshot", "create brief"]
+    assert observed["api_key"] == "fake_key"
+    assert observed["contents"] == "create brief"
+    assert observed["model"] == "gemini-2.5-flash"
     assert response == '{"title":"brief"}'

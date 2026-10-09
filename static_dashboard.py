@@ -43,7 +43,10 @@ def _browser_safe_rows(rows):
 
 
 def _json_safe_rows(dataframe):
-    records = dataframe.where(pd.notna(dataframe), None).to_dict(orient="records")
+    import numpy as np
+    dataframe = dataframe.replace([np.inf, -np.inf], np.nan)
+    dataframe = dataframe.fillna(np.nan).replace({np.nan: None})
+    records = dataframe.to_dict(orient="records")
     return json.loads(json.dumps(records, allow_nan=False))
 
 

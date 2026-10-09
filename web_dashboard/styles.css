@@ -142,6 +142,14 @@ table a { color: var(--dremel-blue-dark); text-underline-offset: 3px; }
 .roi-controls output { float: right; color: var(--dremel-blue-dark); font-weight: 800; font-variant-numeric: tabular-nums; }
 .roi-controls input[type="range"] { width: 100%; accent-color: var(--dremel-orange); display: block; margin-top: 8px; }
 .roi-controls input[type="number"] { width: 100%; min-height: 44px; margin-top: 7px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 4px; }
+
+.info-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 8px; border-radius: 50%; background: var(--dremel-blue); color: #fff; font-size: 0.8rem; font-weight: 800; cursor: help; position: relative; font-style: normal; font-family: serif; vertical-align: text-bottom; }
+.info-icon:hover { background: var(--dremel-orange); }
+.info-icon::after { content: attr(data-tooltip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-6px); width: 220px; background: var(--ink); color: #fff; padding: 9px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 400; font-family: "Source Sans 3", sans-serif; text-align: left; line-height: 1.4; box-shadow: var(--shadow-low); opacity: 0; visibility: hidden; transition: opacity 0.15s ease, transform 0.15s ease; pointer-events: none; z-index: 10; white-space: normal; }
+.info-icon::before { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(4px); border-width: 5px; border-style: solid; border-color: var(--ink) transparent transparent transparent; opacity: 0; visibility: hidden; transition: opacity 0.15s ease, transform 0.15s ease; z-index: 10; }
+.info-icon:hover::after, .info-icon:hover::before { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+.info-icon:hover::after { transform: translateX(-50%) translateY(-10px); }
+
 .roi-controls .toggle-row { display: flex; align-items: center; gap: 9px; }
 .roi-controls .toggle-row input { accent-color: var(--dremel-blue); }
 .roi-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 16px 0 24px; background: var(--line); border: 1px solid var(--line); }

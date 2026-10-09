@@ -70,50 +70,29 @@ def build_carl_prompt(packet, *, packet_sha256):
 
 
 def invoke_carl_profile(prompt, *, profile="carl", timeout=600):
-    """Run one isolated Hermes one-shot turn using Carl's profile."""
-    project_root = Path(__file__).resolve().parent
-    assignment_path = None
-    invocation_prompt = prompt
-    if len(prompt.encode("utf-8")) > 24000:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            prefix="carl_assignment_",
-            suffix=".txt",
-            delete=False,
-        ) as assignment_file:
-            assignment_file.write(prompt)
-            assignment_path = Path(assignment_file.name)
-        invocation_prompt = (
-            f"Read the complete assignment from this UTF-8 file: {assignment_path}. "
-            "Return exactly the response requested by that assignment."
-        )
+    """Run one isolated turn using Gemini for Carl's profile."""
+    import os
+    from dotenv import load_dotenv
+    from google import genai
+
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise CarlIntegrationError("GEMINI_API_KEY environment variable is not set")
+    
     try:
-        completed = subprocess.run(
-            [
-                "hermes",
-                "-p",
-                profile,
-                "--in",
-                str(project_root),
-                "--oneshot",
-                invocation_prompt,
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
-            check=False,
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash"),
+            contents=prompt,
+            config={
+                "temperature": 0.0,
+                "response_mime_type": "application/json",
+            }
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise CarlIntegrationError("Carl profile invocation failed") from exc
-    finally:
-        if assignment_path is not None:
-            assignment_path.unlink(missing_ok=True)
-    if completed.returncode != 0:
-        raise CarlIntegrationError("Carl profile invocation failed")
-    return completed.stdout.strip()
+        return response.text
+    except Exception as exc:
+        raise CarlIntegrationError("Carl profile invocation failed via Gemini") from exc
 
 
 def request_carl_review(*, packet_path, artifacts_root, invoke=None):

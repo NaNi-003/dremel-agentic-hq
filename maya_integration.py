@@ -164,31 +164,30 @@ def build_maya_prompt(
 
 
 def invoke_maya_profile(prompt, *, profile="maya", timeout=600):
-    """Run one isolated Hermes one-shot turn using Maya's profile."""
-    project_root = Path(__file__).resolve().parent
+    """Run one isolated turn using Gemini for Maya's profile."""
+    import os
+    from dotenv import load_dotenv
+    from google import genai
+
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise MayaIntegrationError("GEMINI_API_KEY environment variable is not set")
+    
     try:
-        completed = subprocess.run(
-            [
-                "hermes",
-                "-p",
-                profile,
-                "--in",
-                str(project_root),
-                "--oneshot",
-                prompt,
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
-            check=False,
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-flash"),
+            contents=prompt,
+            config={
+                "temperature": 0.0,
+                "response_mime_type": "application/json",
+            }
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise MayaIntegrationError("Maya profile invocation failed") from exc
-    if completed.returncode != 0:
-        raise MayaIntegrationError("Maya profile invocation failed")
-    return completed.stdout.strip()
+        return response.text
+    except Exception as exc:
+        print(f"MAYA API ERROR: {exc}")
+        raise MayaIntegrationError("Maya profile invocation failed via Gemini") from exc
 
 
 def request_maya_brief(

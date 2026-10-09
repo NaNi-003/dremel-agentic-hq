@@ -1,7 +1,7 @@
 pandas==2.3.3
 numpy==2.2.6
 Pillow==12.3.0
-opencv-python==5.0.0.93
+opencv-python==4.10.0.84
 spacy==3.8.14
 google-api-python-client==2.197.0
 youtube-transcript-api==1.2.4

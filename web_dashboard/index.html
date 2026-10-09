@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Dremel predictive trend intelligence dashboard">
   <title>Dremel Trend Engine</title>
-  <link rel="stylesheet" href="styles.css?v=20260921T204508Z-6879fa8c">
+  <link rel="stylesheet" href="styles.css?v=20260922T0936">
 </head>
 <body>
   <aside class="sidebar">
@@ -95,20 +95,20 @@
       <div class="roi-layout">
         <form id="roi-form" class="roi-controls">
           <h4>1. Acquisition &amp; Fixed Costs</h4>
-          <label>Target Trend for Financial Model:<select id="roi-trend"></select></label>
-          <label>Target Creator Average Views <output id="views-output"></output><input id="views" type="range" min="10000" max="500000" value="150000" step="10000"></label>
-          <label>Influencer CPM (£ per 1000 views) <output id="cpm-output"></output><input id="cpm" type="range" min="5" max="50" value="20" step="1"></label>
-          <label>Fixed Seeding Costs (£) <output id="fixed-output"></output><input id="fixed" type="range" min="0" max="1000" value="150" step="50"></label>
+          <label>Target Trend for Financial Model <i class="info-icon" data-tooltip="Select the specific campaign topic to populate its baseline views and metrics.">i</i><select id="roi-trend"></select></label>
+          <label>Target Creator Average Views <i class="info-icon" data-tooltip="The estimated average viewership per video produced by the targeted influencer.">i</i><output id="views-output"></output><input id="views" type="range" min="10000" max="500000" value="150000" step="10000"></label>
+          <label>Influencer CPM (£ per 1000 views) <i class="info-icon" data-tooltip="The estimated cost per 1,000 views charged by the influencer for integration.">i</i><output id="cpm-output"></output><input id="cpm" type="range" min="5" max="50" value="20" step="1"></label>
+          <label>Fixed Seeding Costs (£) <i class="info-icon" data-tooltip="Total fixed costs for sending physical tools, shipping, and setup for the influencer.">i</i><output id="fixed-output"></output><input id="fixed" type="range" min="0" max="1000" value="150" step="50"></label>
           <h4>2. Funnel Economics</h4>
-          <label>Baseline Click-Through Rate (CTR %) <output id="ctr-output"></output><input id="ctr" type="range" min="0.1" max="5" value="1" step="0.1"></label>
-          <label>Website Conversion Rate (CVR %) <output id="cvr-output"></output><input id="cvr" type="range" min="0.5" max="5" value="2" step="0.1"></label>
+          <label>Baseline Click-Through Rate (CTR %) <i class="info-icon" data-tooltip="The expected percentage of viewers who click the link in the video description or comments.">i</i><output id="ctr-output"></output><input id="ctr" type="range" min="0.1" max="5" value="1" step="0.1"></label>
+          <label>Website Conversion Rate (CVR %) <i class="info-icon" data-tooltip="The estimated percentage of visitors from the campaign who successfully purchase the tool.">i</i><output id="cvr-output"></output><input id="cvr" type="range" min="0.5" max="5" value="2" step="0.1"></label>
           <h4>3. Margin &amp; Promotions</h4>
-          <label>Avg. Dremel Retail Price (£) <output id="price-output"></output><input id="price" type="range" min="30" max="150" value="70" step="5"></label>
-          <label>Base Tool Margin (£) <output id="margin-output"></output><input id="margin" type="range" min="10" max="100" value="35" step="5"></label>
-          <label>Influencer Promo Code Discount (%) <output id="discount-output"></output><input id="discount" type="range" min="0" max="30" value="10" step="5"></label>
-          <label class="toggle-row"><input id="clv" type="checkbox"> Include Year 1 Accessory CLV (+£15/unit)</label>
+          <label>Avg. Dremel Retail Price (£) <i class="info-icon" data-tooltip="The average selling price of the Dremel tool to the consumer.">i</i><output id="price-output"></output><input id="price" type="range" min="30" max="150" value="70" step="5"></label>
+          <label>Base Tool Margin (£) <i class="info-icon" data-tooltip="The profit margin per unit sold before any promotional discounts.">i</i><output id="margin-output"></output><input id="margin" type="range" min="10" max="100" value="35" step="5"></label>
+          <label>Influencer Promo Code Discount (%) <i class="info-icon" data-tooltip="The percentage discount offered to viewers through the influencer's unique promo code.">i</i><output id="discount-output"></output><input id="discount" type="range" min="0" max="30" value="10" step="5"></label>
+          <label class="toggle-row"><input id="clv" type="checkbox"> Include Year 1 Accessory CLV (+£15/unit) <i class="info-icon" data-tooltip="Includes projected customer lifetime value from accessory purchases in the first year.">i</i></label>
           <h4>4. Marketing Availability Guardrail</h4>
-          <label>Available Units for This Campaign<input id="inventory" type="number" min="0" value="10000" step="100" inputmode="numeric"></label>
+          <label>Available Units for This Campaign <i class="info-icon" data-tooltip="The current inventory limit, to ensure campaign demand doesn't exceed stock.">i</i><input id="inventory" type="number" min="0" value="10000" step="100" inputmode="numeric"></label>
         </form>
         <div class="roi-results">
           <h4>Projected Outcomes</h4>
@@ -120,6 +120,6 @@
     </section>
   </main>
   <noscript>This dashboard requires JavaScript to display the published research.</noscript>
-  <script src="app.js?v=20260921T204508Z-6879fa8c" defer></script>
+  <script src="app.js?v=20260922T0936" defer></script>
 </body>
 </html>

@@ -79,6 +79,17 @@ def test_visual_analysis_uses_unique_temporary_files_and_cleans_them(monkeypatch
         },
     )
     monkeypatch.setattr(cv_layer, "_detect_faces", lambda path: ([], (100, 200)))
+    monkeypatch.setattr(
+        cv_layer,
+        "_analyze_objects_with_gemini",
+        lambda path: {
+            "objects": ["chair"],
+            "tools": ["rotary tool"],
+            "face_count": 0,
+            "facial_expressions": [],
+            "method": "fixture_semantic_vision",
+        },
+    )
     frame = pd.DataFrame(
         [
             {"video_id": "same-id", "thumbnail_url": "https://example.test/1"},
@@ -94,3 +105,43 @@ def test_visual_analysis_uses_unique_temporary_files_and_cleans_them(monkeypatch
     assert result.iloc[0]["cv_face_count"] == 0
     assert result.iloc[0]["cv_brightness"] == 0.5
     assert result.iloc[0]["cv_palette"] == ["#785028", "#1e2832", "#dcd2be"]
+    assert result.iloc[0]["cv_objects"] == ["chair"]
+    assert result.iloc[0]["cv_tools"] == ["rotary tool"]
+    assert result.iloc[0]["cv_semantic_method"] == "fixture_semantic_vision"
+
+
+def test_missing_opencv_face_classifier_does_not_discard_color_analysis(monkeypatch, tmp_path):
+    image_path = tmp_path / "thumbnail.png"
+    Image.new("RGB", (100, 80), "blue").save(image_path)
+    monkeypatch.setattr(cv_layer.cv2, "CascadeClassifier", None)
+
+    boxes, shape = cv_layer._detect_faces(str(image_path))
+
+    assert boxes == []
+    assert shape == (80, 100)
+
+
+def test_semantic_vision_returns_bounded_objects_and_tools(monkeypatch, tmp_path):
+    image_path = tmp_path / "thumbnail.png"
+    Image.new("RGB", (100, 80), "white").save(image_path)
+
+    class FakeModels:
+        def generate_content(self, **kwargs):
+            return type(
+                "Response",
+                (),
+                    {"text": '{"objects":["chair","table"],"tools":["drill"],"face_count":1,"facial_expressions":["happy"]}'},
+            )()
+
+    fake_client = type("Client", (), {"models": FakeModels()})()
+    monkeypatch.setattr(cv_layer, "_get_vision_client", lambda: fake_client)
+
+    result = cv_layer._analyze_objects_with_gemini(str(image_path))
+
+    assert result == {
+        "objects": ["chair", "table"],
+        "tools": ["drill"],
+        "face_count": 1,
+        "facial_expressions": ["happy"],
+        "method": "gemini_structured_vision",
+    }

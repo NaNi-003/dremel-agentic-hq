@@ -165,39 +165,27 @@ def test_request_carl_review_binds_approval_citations_to_selected_candidate(
     assert result["decision"]["evidence_citations"] == ["evidence.json#/videos/1"]
 
 
-def test_invoke_carl_profile_uses_named_hermes_profile(monkeypatch):
+def test_invoke_carl_profile_uses_genai(monkeypatch):
     observed = {}
 
-    def fake_run(command, **kwargs):
-        observed["command"] = command
-        observed["kwargs"] = kwargs
-        return SimpleNamespace(returncode=0, stdout=' {"decision":"reject"}\n')
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            observed["model"] = model
+            observed["contents"] = contents
+            observed["config"] = config
+            return SimpleNamespace(text='{"decision":"reject"}')
 
-    monkeypatch.setattr(carl_integration.subprocess, "run", fake_run)
+    class FakeClient:
+        def __init__(self, api_key):
+            observed["api_key"] = api_key
+            self.models = FakeModels()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "fake_key")
+    monkeypatch.setattr("google.genai.Client", FakeClient)
 
     response = carl_integration.invoke_carl_profile("review this", profile="carl")
 
-    assert observed["command"][0:3] == ["hermes", "-p", "carl"]
-    assert observed["command"][-2:] == ["--oneshot", "review this"]
+    assert observed["api_key"] == "fake_key"
+    assert observed["contents"] == "review this"
+    assert observed["model"] == "gemini-2.5-flash"
     assert response == '{"decision":"reject"}'
-
-
-def test_invoke_carl_profile_uses_temporary_assignment_for_windows_sized_prompt(monkeypatch):
-    observed = {}
-    large_prompt = "review evidence\n" * 5000
-
-    def fake_run(command, **kwargs):
-        observed["command"] = command
-        assignment = command[-1]
-        marker = "Read the complete assignment from this UTF-8 file: "
-        assignment_path = assignment.split(marker, 1)[1].split(". Return", 1)[0]
-        with open(assignment_path, encoding="utf-8") as handle:
-            observed["assignment"] = handle.read()
-        return SimpleNamespace(returncode=0, stdout='{"decision":"reject"}')
-
-    monkeypatch.setattr(carl_integration.subprocess, "run", fake_run)
-
-    carl_integration.invoke_carl_profile(large_prompt, profile="carl")
-
-    assert observed["assignment"] == large_prompt
-    assert large_prompt not in observed["command"]

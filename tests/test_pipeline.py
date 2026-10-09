@@ -76,6 +76,28 @@ def test_comment_enrichment_is_bounded_to_primary_candidates_and_keeps_score_sep
     assert result.failures == []
 
 
+def test_viewer_sentiment_is_flattened_for_dashboard_display():
+    frame = pd.DataFrame([{"video_id": "positive"}, {"video_id": "missing"}])
+    videos = [
+        {
+            "video_id": "positive",
+            "comment_sentiment": {
+                "comments_sampled": 40,
+                "sentiment_score": 0.62,
+                "confidence": "medium",
+                "shares": {"positive": 0.8, "neutral": 0.15, "negative": 0.05},
+            },
+        }
+    ]
+
+    result = main.attach_viewer_sentiment(frame, videos)
+
+    assert result.iloc[0]["viewer_sentiment"] == "Positive"
+    assert result.iloc[0]["viewer_comments_sampled"] == 40
+    assert result.iloc[0]["viewer_positive_share"] == 0.8
+    assert result.iloc[1]["viewer_sentiment"] == "Unavailable"
+
+
 def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_path):
     output_path = tmp_path / "dremel_final_output.csv"
     fixed_now = datetime(2026, 9, 16, tzinfo=timezone.utc)
@@ -114,8 +136,17 @@ def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_pat
     assert result.error is None
 
     saved = pd.read_csv(output_path)
-    assert saved.to_dict("records") == [
-        {
+    assert saved.iloc[0][[
+        "video_id",
+        "video_title",
+        "thumbnail_url",
+        "detected_verb",
+        "detected_material",
+        "action_pair",
+        "velocity_score",
+        "cv_color_hex",
+        "cv_emotion",
+    ]].to_dict() == {
             "video_id": "fixture-restore-table",
             "video_title": "Restoring a table",
             "thumbnail_url": "https://example.invalid/table.jpg",
@@ -126,7 +157,9 @@ def test_run_pipeline_returns_a_structured_success_result_and_legacy_csv(tmp_pat
             "cv_color_hex": "#123456",
             "cv_emotion": "Fixture",
         }
-    ]
+    assert saved.iloc[0]["viewer_sentiment"] == "Positive"
+    assert saved.iloc[0]["viewer_sentiment_score"] == 0.8
+    assert saved.iloc[0]["viewer_comments_sampled"] == 1
     evidence = json.loads(Path(result.evidence_path).read_text(encoding="utf-8"))
     assert evidence["videos"][0]["comment_sentiment"]["sentiment_score"] == 0.8
 

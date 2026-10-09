@@ -1,4 +1,5 @@
 import os
+import json
 from tempfile import NamedTemporaryFile
 
 import requests
@@ -7,10 +8,13 @@ import cv2
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageStat
+from dotenv import load_dotenv
 
 
 _DEEPFACE = None
 _DEEPFACE_IMPORT_ATTEMPTED = False
+_VISION_CLIENT = None
+_VISION_CLIENT_ATTEMPTED = False
 
 
 def _get_deepface():
@@ -25,6 +29,23 @@ def _get_deepface():
         else:
             _DEEPFACE = DeepFace
     return _DEEPFACE
+
+
+def _get_vision_client():
+    """Load Gemini vision only when an API key is configured."""
+    global _VISION_CLIENT, _VISION_CLIENT_ATTEMPTED
+    if not _VISION_CLIENT_ATTEMPTED:
+        _VISION_CLIENT_ATTEMPTED = True
+        load_dotenv()
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key:
+            try:
+                from google import genai
+            except Exception:
+                _VISION_CLIENT = None
+            else:
+                _VISION_CLIENT = genai.Client(api_key=api_key)
+    return _VISION_CLIENT
 
 def download_image(url, filename):
     response = requests.get(url, timeout=15)
@@ -97,11 +118,115 @@ def _detect_faces(img_path):
     if image is None:
         return [], None
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(
+    classifier = getattr(cv2, "CascadeClassifier", None)
+    data = getattr(cv2, "data", None)
+    if classifier is None or data is None:
+        return [], grayscale.shape
+    cascade = classifier(
         cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     )
     boxes = cascade.detectMultiScale(grayscale, scaleFactor=1.1, minNeighbors=5)
     return [tuple(int(value) for value in box) for box in boxes], grayscale.shape
+
+
+def _analyze_objects_with_gemini(img_path):
+    """Return bounded semantic object/tool labels for a public thumbnail."""
+    client = _get_vision_client()
+    if client is None:
+        return {
+            "objects": [],
+            "tools": [],
+            "face_count": 0,
+            "facial_expressions": [],
+            "method": "unavailable_not_configured",
+        }
+    schema = {
+        "type": "object",
+        "properties": {
+            "objects": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 8,
+                "description": "Prominent visible physical objects only.",
+            },
+            "tools": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 5,
+                "description": "Clearly visible hand or power tools only.",
+            },
+            "face_count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Number of clearly visible human faces.",
+            },
+            "facial_expressions": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "happy", "surprised", "neutral", "sad", "angry",
+                        "fearful", "disgusted", "unclear"
+                    ],
+                },
+                "maxItems": 5,
+                "description": "One visible expression label per face, or unclear.",
+            },
+        },
+        "required": ["objects", "tools", "face_count", "facial_expressions"],
+        "additionalProperties": False,
+    }
+    prompt = (
+        "Inspect this YouTube thumbnail. List only prominent physical objects that "
+        "are visibly present. Separately list tools only when clearly visible. Do not "
+        "infer hidden items, brands, actions, audience emotions, or marketing "
+        "performance. Count clearly visible human faces and describe only their "
+        "visible expression using the allowed labels. Use short generic object "
+        "labels and return empty lists when uncertain."
+    )
+    try:
+        with Image.open(img_path) as image:
+            response = client.models.generate_content(
+                model=os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash"),
+                contents=[image.copy(), prompt],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": schema,
+                    "temperature": 0,
+                },
+            )
+        payload = json.loads(response.text or "{}")
+        objects = payload.get("objects", [])
+        tools = payload.get("tools", [])
+        expressions = payload.get("facial_expressions", [])
+        face_count = payload.get("face_count", 0)
+        if (
+            not isinstance(objects, list)
+            or not isinstance(tools, list)
+            or not isinstance(expressions, list)
+            or not isinstance(face_count, int)
+        ):
+            raise ValueError("Vision response did not contain object lists")
+        clean = lambda values, limit: [
+            value.strip()[:60]
+            for value in values[:limit]
+            if isinstance(value, str) and value.strip()
+        ]
+        return {
+            "objects": clean(objects, 8),
+            "tools": clean(tools, 5),
+            "face_count": max(face_count, 0),
+            "facial_expressions": clean(expressions, 5),
+            "method": "gemini_structured_vision",
+        }
+    except Exception:
+        return {
+            "objects": [],
+            "tools": [],
+            "face_count": 0,
+            "facial_expressions": [],
+            "method": "unavailable_analysis_failed",
+        }
 
 
 def _face_composition(image_shape, boxes):
@@ -220,19 +345,7 @@ def run_visual_analysis(df, top_n=3):
                         color_thief = ColorThief(img_path)
                         dominant_rgb = color_thief.get_color(quality=1)
                         palette = color_thief.get_palette(color_count=3, quality=1)
-                        face_boxes, image_shape = _detect_faces(img_path)
-                        face_composition = _face_composition(image_shape, face_boxes)
-                        evidence = _analyze_thumbnail(
-                            img_path,
-                            dominant_rgb,
-                            face_count=face_composition["face_count"],
-                            image_metrics=_thumbnail_metrics(img_path),
-                            palette=palette,
-                            face_composition=face_composition,
-                        )
-                        dom_color = evidence["dominant_color"]
-                        emotion = evidence["facial_expression"] or "No face detected"
-                        method = evidence["method"]
+                        image_metrics = _thumbnail_metrics(img_path)
                     except Exception:
                         dom_color = "#Unknown"
                         emotion = "Unavailable"
@@ -254,7 +367,55 @@ def run_visual_analysis(df, top_n=3):
                             "face_area_share": 0.0,
                             "central_face": False,
                             "method": method,
+                            "objects": [],
+                            "tools": [],
+                            "semantic_method": "unavailable_analysis_failed",
                         }
+                    else:
+                        try:
+                            face_boxes, image_shape = _detect_faces(img_path)
+                        except Exception:
+                            face_boxes, image_shape = [], None
+                        face_composition = _face_composition(image_shape, face_boxes)
+                        try:
+                            evidence = _analyze_thumbnail(
+                                img_path,
+                                dominant_rgb,
+                                face_count=face_composition["face_count"],
+                                image_metrics=image_metrics,
+                                palette=palette,
+                                face_composition=face_composition,
+                            )
+                        except Exception:
+                            evidence = {
+                                "dominant_color": rgb_to_hex(dominant_rgb),
+                                "palette": [rgb_to_hex(color) for color in palette],
+                                "color_temperature": _color_temperature(dominant_rgb),
+                                "facial_expression": None,
+                                "expression_confidence": None,
+                                "face_count": face_composition["face_count"],
+                                "marketing_cues": [],
+                                **image_metrics,
+                                **face_composition,
+                                "method": "thumbnail_features_expression_failed",
+                            }
+                        semantic = _analyze_objects_with_gemini(img_path)
+                        evidence["objects"] = semantic["objects"]
+                        evidence["tools"] = semantic["tools"]
+                        evidence["semantic_method"] = semantic["method"]
+                        semantic_expressions = semantic.get("facial_expressions", [])
+                        if not evidence["facial_expression"] and semantic_expressions:
+                            evidence["facial_expression"] = semantic_expressions[0].capitalize()
+                            evidence["method"] += "+gemini_expression"
+                        if not evidence["face_count"] and semantic.get("face_count"):
+                            evidence["face_count"] = semantic["face_count"]
+                        dom_color = evidence["dominant_color"]
+                        emotion = evidence["facial_expression"] or (
+                            "Face detected; expression unavailable"
+                            if evidence["face_count"]
+                            else "No face detected"
+                        )
+                        method = evidence["method"]
         finally:
             _cleanup_temp_image(img_path)
 
@@ -279,6 +440,9 @@ def run_visual_analysis(df, top_n=3):
                 "face_area_share": 0.0,
                 "central_face": False,
                 "method": method,
+                "objects": [],
+                "tools": [],
+                "semantic_method": "unavailable",
             }
         evidence_rows.append(evidence)
         del evidence
@@ -299,5 +463,8 @@ def run_visual_analysis(df, top_n=3):
     top_trends['cv_face_area_share'] = [item["face_area_share"] for item in evidence_rows]
     top_trends['cv_central_face'] = [item["central_face"] for item in evidence_rows]
     top_trends['cv_marketing_cues'] = [item["marketing_cues"] for item in evidence_rows]
+    top_trends['cv_objects'] = [item.get("objects", []) for item in evidence_rows]
+    top_trends['cv_tools'] = [item.get("tools", []) for item in evidence_rows]
+    top_trends['cv_semantic_method'] = [item.get("semantic_method", "unavailable") for item in evidence_rows]
     
     return top_trends

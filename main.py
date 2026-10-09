@@ -2,6 +2,7 @@ from dataclasses import dataclass, replace
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 import re
 from tempfile import NamedTemporaryFile
 from typing import Optional
@@ -231,6 +232,28 @@ def normalize_output_frame(final_df):
         "velocity_score",
         "cv_color_hex",
         "cv_emotion",
+        "cv_palette",
+        "cv_color_temperature",
+        "cv_face_count",
+        "cv_expression_confidence",
+        "cv_brightness",
+        "cv_saturation",
+        "cv_contrast",
+        "cv_text_like_region_density",
+        "cv_visual_clutter",
+        "cv_face_area_share",
+        "cv_central_face",
+        "cv_objects",
+        "cv_tools",
+        "cv_method",
+        "cv_semantic_method",
+        "viewer_sentiment",
+        "viewer_sentiment_score",
+        "viewer_sentiment_confidence",
+        "viewer_comments_sampled",
+        "viewer_positive_share",
+        "viewer_neutral_share",
+        "viewer_negative_share",
     ]
 
     final_df = final_df.copy()
@@ -238,7 +261,62 @@ def normalize_output_frame(final_df):
         if column not in final_df.columns:
             final_df[column] = pd.NA
 
+    for column in ("cv_palette", "cv_objects", "cv_tools"):
+        final_df[column] = final_df[column].map(
+            lambda value: json.dumps(value, ensure_ascii=False)
+            if isinstance(value, (list, tuple))
+            else value
+        )
+
     return final_df[expected_columns]
+
+
+def _viewer_sentiment_label(sentiment):
+    if not isinstance(sentiment, dict) or not sentiment.get("comments_sampled"):
+        return "Unavailable"
+    shares = sentiment.get("shares") or {}
+    positive = float(shares.get("positive", 0) or 0)
+    negative = float(shares.get("negative", 0) or 0)
+    if positive >= 0.25 and negative >= 0.25:
+        return "Mixed"
+    score = sentiment.get("sentiment_score")
+    if not isinstance(score, (int, float)):
+        return "Unavailable"
+    if score >= 0.05:
+        return "Positive"
+    if score <= -0.05:
+        return "Negative"
+    return "Neutral"
+
+
+def attach_viewer_sentiment(candidate_df, videos):
+    """Flatten primary-candidate comment evidence for dashboard display."""
+    result = candidate_df.copy()
+    by_video = {
+        video.get("video_id"): video.get("comment_sentiment")
+        for video in videos
+        if isinstance(video, dict) and video.get("video_id")
+    }
+    sentiments = [by_video.get(video_id) for video_id in result["video_id"]]
+    result["viewer_sentiment"] = [_viewer_sentiment_label(item) for item in sentiments]
+    result["viewer_sentiment_score"] = [
+        item.get("sentiment_score") if isinstance(item, dict) else None
+        for item in sentiments
+    ]
+    result["viewer_sentiment_confidence"] = [
+        item.get("confidence", "unavailable") if isinstance(item, dict) else "unavailable"
+        for item in sentiments
+    ]
+    result["viewer_comments_sampled"] = [
+        item.get("comments_sampled", 0) if isinstance(item, dict) else 0
+        for item in sentiments
+    ]
+    for label in ("positive", "neutral", "negative"):
+        result[f"viewer_{label}_share"] = [
+            (item.get("shares") or {}).get(label) if isinstance(item, dict) else None
+            for item in sentiments
+        ]
+    return result
 
 
 def keep_top_unique_rows(final_df, limit=10):
@@ -536,6 +614,7 @@ def _run_pipeline_impl(
         comment_enrichment_fn(raw_data, primary_ids, max_results=100),
         partial_failures,
     )
+    candidate_df = attach_viewer_sentiment(candidate_df, raw_data)
     evidence = run_artifacts.build_evidence_document(
         run_id,
         target_channels,
