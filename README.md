@@ -89,6 +89,8 @@ python -m hq publish --confirm [--site-dir dist/dashboard] [--slug SLUG]
 python -m hq status [--run-id ID]
 ```
 
+A candidate id may start with `_` or `-`. `hq evidence` takes that id as a positional argument; put a leading-dash id after `--` so it is not parsed as a flag (`python -m hq evidence --runs-root RUNS -- -ESBvLrp3IQ`). Other options go before the `--`.
+
 `collect` reuses the latest usable run when it is still inside `--max-age-hours` (default 24). Otherwise it collects. `--reuse` never collects and reports `fresh` or `stale`. `--refresh` always collects; if that fails and an older usable run exists, the command returns that run with `freshness: stale` and a `refresh_error`. A partial collection is `collection_status: partial` and includes `collected_at`. `--fixture` runs the checked-in videos file and does not call YouTube.
 
 Review JSON, brief JSON, and the order of work are in [`AGENTS.md`](AGENTS.md).

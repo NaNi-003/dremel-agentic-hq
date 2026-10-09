@@ -6,6 +6,8 @@ Scores are age-adjusted engagement. Do not edit them. Colour and expression labe
 
 Commands may print progress lines before the final JSON object. Parse the last JSON object on stdout. A non-zero exit is the error.
 
+Candidate ids use the YouTube charset `[A-Za-z0-9_-]` and may start with `_` or `-`. `hq evidence` takes the id as a positional argument. If it starts with `-`, put other options first and the id after `--` so it is not read as a flag: `python -m hq evidence -- -ESBvLrp3IQ`.
+
 ## Roxy
 
 Trigger and oversight. She does not collect or review.

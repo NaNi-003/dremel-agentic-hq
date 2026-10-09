@@ -56,7 +56,10 @@ def _build_parser():
     candidates.set_defaults(func=_candidates)
 
     evidence = commands.add_parser("evidence", help="Show evidence for one candidate.")
-    evidence.add_argument("candidate_id")
+    evidence.add_argument(
+        "candidate_id",
+        help="YouTube video id. If it starts with '-', put options first and the id after --.",
+    )
     _add_run_selection(evidence, with_age=True)
     evidence.set_defaults(func=_evidence)
 

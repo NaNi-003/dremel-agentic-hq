@@ -428,6 +428,84 @@ def test_partial_collection_is_reported(tmp_path, capsys):
     assert payload["collected_at"]
 
 
+@pytest.mark.parametrize("video_id", ["_ESBvLrp3IQ", "-ESBvLrp3IQ"])
+def test_youtube_ids_may_start_with_underscore_or_dash(tmp_path, capsys, video_id):
+    runs, _ = collect_fixture(tmp_path, capsys)
+    _set_candidate_id(runs, video_id)
+
+    code, evidence = invoke(
+        ["evidence", "--runs-root", str(runs), "--", video_id],
+        capsys,
+    )
+    assert code == 0, evidence
+    assert evidence["candidate_id"] == video_id
+
+    decision = _write(tmp_path / "decision.json", _decision(candidate_id=video_id))
+    code, review = invoke(
+        ["review", "--runs-root", str(runs), "--input", str(decision)],
+        capsys,
+    )
+    assert code == 0, review
+    decision_path = Path(review["decision_path"])
+    assert decision_path.name == f"{video_id}.json"
+    assert decision_path.parent.name == "decisions"
+
+    brief = _write(tmp_path / "brief.json", _brief(candidate_id=video_id))
+    code, saved = invoke(
+        ["brief", "--runs-root", str(runs), "--input", str(brief)],
+        capsys,
+    )
+    assert code == 0, saved
+    assert saved["candidate_id"] == video_id
+    assert Path(saved["brief_path"]).name == f"{video_id}.json"
+
+    code, state = invoke(["status", "--runs-root", str(runs)], capsys)
+    assert code == 0, state
+    assert video_id not in state["pending_candidate_ids"]
+    assert state["approved_without_briefs"] == []
+    assert state["briefs"] == 1
+
+
+@pytest.mark.parametrize("video_id", ["../secret", "..", "foo/bar", "foo\\bar", "a..b"])
+def test_candidate_id_rejects_path_traversal(tmp_path, capsys, video_id):
+    runs, _ = collect_fixture(tmp_path, capsys)
+    reviews = tmp_path / "reviews"
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*") if path.is_file())
+
+    code, evidence = invoke(
+        ["evidence", "--runs-root", str(runs), "--", video_id],
+        capsys,
+    )
+    assert code == 1
+    assert evidence["error"] == "Invalid candidate id"
+
+    decision = _write(tmp_path / "decision.json", _decision(candidate_id=video_id))
+    code, review = invoke(
+        ["review", "--runs-root", str(runs), "--input", str(decision)],
+        capsys,
+    )
+    assert code == 1
+    assert review["error"] == "Invalid candidate id"
+
+    brief = _write(tmp_path / "brief.json", _brief(candidate_id=video_id))
+    code, saved = invoke(
+        ["brief", "--runs-root", str(runs), "--input", str(brief)],
+        capsys,
+    )
+    assert code == 1
+    assert saved["error"] == "Invalid candidate id"
+    assert not reviews.exists()
+    after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*") if path.is_file())
+    assert after == sorted([*before, Path("decision.json"), Path("brief.json")])
+
+
+def _set_candidate_id(runs, video_id):
+    path = candidates_file(runs)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["candidates"][0]["video_id"] = video_id
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def test_invalid_run_id_and_json_object_are_rejected(tmp_path, capsys):
     runs, _ = collect_fixture(tmp_path, capsys)
     code, payload = invoke(["candidates", "--runs-root", str(runs), "--run-id", "../secret"], capsys)
