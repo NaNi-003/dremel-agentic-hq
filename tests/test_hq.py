@@ -62,6 +62,21 @@ def _brief(candidate_id="fixture-restore-table", **overrides):
         "key_beats": ["Show the worn edge", "Sand one pass", "Hold the reveal"],
         "thumbnail_direction": "Use the dark palette as a style reference, not as audience emotion.",
         "call_to_action": "Ask which edge they would restore first.",
+        "objective": "Show one precise restoration step a new DIYer can copy.",
+        "audience_insight": "New DIYers want proof the worn piece can be saved.",
+        "hook_options": [
+            "The top looks finished. The edge does not.",
+            "One pass changes the edge.",
+            "Save the table before you replace it.",
+        ],
+        "information_gap": {
+            "known": "The edge is worn.",
+            "unknown": "Whether one sanding pass can save it.",
+            "payoff": "The restored edge, shown last.",
+        },
+        "product_role": "The tool does the visible sanding pass.",
+        "success_metrics": ["Saves", "Qualified comments", "Completion"],
+        "claims_guardrails": "Do not promise a guaranteed result or treat colour as audience emotion.",
     }
     payload.update(overrides)
     return payload
@@ -247,6 +262,11 @@ def test_brief_requires_an_approval_and_dashboard_hides_other_briefs(tmp_path, c
     )
     assert code == 0
     assert saved["candidate_id"] == "fixture-restore-table"
+    stored = json.loads(Path(saved["brief_path"]).read_text(encoding="utf-8"))["brief"]
+    assert stored["information_gap"]["payoff"]
+    assert stored["hook_options"]
+    assert stored["success_metrics"]
+    assert stored["objective"] and stored["claims_guardrails"]
 
     stray = json.loads(Path(saved["brief_path"]).read_text(encoding="utf-8"))
     stray["candidate_id"] = "someone-else"
@@ -270,6 +290,42 @@ def test_brief_requires_an_approval_and_dashboard_hides_other_briefs(tmp_path, c
     assert "Autonomous Content Ideation" in html
     assert "__HQ_DASHBOARD_VERSION__" not in app_js
     assert "Age-adjusted" in app_js
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "objective",
+        "audience_insight",
+        "hook_options",
+        "information_gap",
+        "product_role",
+        "success_metrics",
+        "claims_guardrails",
+    ],
+)
+def test_brief_requires_september_sections(tmp_path, capsys, field):
+    runs, _ = collect_fixture(tmp_path, capsys)
+    approved = _write(tmp_path / "approve.json", _decision())
+    assert invoke(["review", "--runs-root", str(runs), "--input", str(approved)], capsys)[0] == 0
+    incomplete = _brief()
+    incomplete.pop(field)
+    path = _write(tmp_path / "incomplete.json", incomplete)
+    code, payload = invoke(["brief", "--runs-root", str(runs), "--input", str(path)], capsys)
+    assert code == 1
+    assert field in payload["error"]
+
+    blank = _brief()
+    if field == "information_gap":
+        blank["information_gap"] = {"known": "The edge is worn.", "unknown": "If it can be saved.", "payoff": " "}
+    elif field in {"hook_options", "success_metrics"}:
+        blank[field] = []
+    else:
+        blank[field] = "  "
+    path = _write(tmp_path / "blank.json", blank)
+    code, payload = invoke(["brief", "--runs-root", str(runs), "--input", str(path)], capsys)
+    assert code == 1
+    assert field in payload["error"]
 
 
 def test_publish_refuses_without_human_confirmation(tmp_path, capsys, monkeypatch):

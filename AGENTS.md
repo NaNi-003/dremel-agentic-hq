@@ -60,11 +60,18 @@ Briefs. Write only for candidates Carl approved. Read the decision file and `pyt
   "concept": "",
   "key_beats": ["", ""],
   "thumbnail_direction": "",
-  "call_to_action": ""
+  "call_to_action": "",
+  "objective": "",
+  "audience_insight": "",
+  "hook_options": ["", ""],
+  "information_gap": {"known": "", "unknown": "", "payoff": ""},
+  "product_role": "",
+  "success_metrics": ["", ""],
+  "claims_guardrails": ""
 }
 ```
 
-Optional keys the dashboard can also show: `objective`, `audience_insight`, `hook_options`, `success_metrics`, `product_role`, `claims_guardrails`, and `information_gap` (`known`, `unknown`, `payoff`).
+Every string and list must be non-empty. `information_gap` needs `known`, `unknown`, and `payoff`.
 
 The command refuses a candidate that is not `approve`. Tell Roxy with the `handoff` line: `Brief saved for <candidate_id>. Path: <brief_path>`.
 

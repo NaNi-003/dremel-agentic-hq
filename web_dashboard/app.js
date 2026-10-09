@@ -96,26 +96,31 @@ function renderBrief() {
     $("brief-content").innerHTML = `<div class="brief-preview"><span class="preview-rank">Primary opportunity ${state.selectedIndex + 1} of 15</span><h2>${escapeHtml(titleCase(selected.action_pair))}</h2><p>A saved creator brief is ready. Open it to review the campaign concept, hook, key beats, and thumbnail direction.</p><button type="button" class="preview-action" onclick="document.getElementById('brief-button').click()">Open campaign brief</button></div>`;
     return;
   }
-  const brief = artifact.brief;
-  const gap = brief.information_gap;
-  const professionalText = gap ? ["", "Objective", brief.objective, "", "Audience Insight", brief.audience_insight, "", "Information Gap", `Known: ${gap.known}`, `Unknown: ${gap.unknown}`, `Payoff: ${gap.payoff}`, "", "Alternative Hooks", ...brief.hook_options.map((hook, i) => `${i + 1}. ${hook}`), "", "Product Role", brief.product_role, "", "Success Metrics", ...brief.success_metrics.map((metric) => `- ${metric}`), "", "Claims Guardrails", brief.claims_guardrails] : [];
-  const plainText = [brief.title, ...professionalText, "", "Strategic Rationale", brief.strategic_rationale, "", `Audience: ${brief.audience}`, `Tone: ${brief.tone}`, "", "Hook", brief.hook, "", "YouTube Short Concept", brief.concept, "", "Key Beats", ...brief.key_beats.map((beat, i) => `${i + 1}. ${beat}`), "", "Thumbnail Direction", brief.thumbnail_direction, "", "Call to Action", brief.call_to_action].join("\n");
+  const brief = artifact.brief && typeof artifact.brief === "object" ? artifact.brief : {};
+  const asList = (value) => Array.isArray(value) ? value : [];
+  const gap = brief.information_gap && typeof brief.information_gap === "object" && !Array.isArray(brief.information_gap) ? brief.information_gap : null;
+  const hookOptions = asList(brief.hook_options);
+  const successMetrics = asList(brief.success_metrics);
+  const keyBeats = asList(brief.key_beats);
+  const professionalText = gap ? ["", "Objective", brief.objective ?? "", "", "Audience Insight", brief.audience_insight ?? "", "", "Information Gap", `Known: ${gap.known ?? ""}`, `Unknown: ${gap.unknown ?? ""}`, `Payoff: ${gap.payoff ?? ""}`, "", "Alternative Hooks", ...hookOptions.map((hook, i) => `${i + 1}. ${hook}`), "", "Product Role", brief.product_role ?? "", "", "Success Metrics", ...successMetrics.map((metric) => `- ${metric}`), "", "Claims Guardrails", brief.claims_guardrails ?? ""] : [];
+  const plainText = [brief.title ?? "", ...professionalText, "", "Strategic Rationale", brief.strategic_rationale ?? "", "", `Audience: ${brief.audience ?? ""}`, `Tone: ${brief.tone ?? ""}`, "", "Hook", brief.hook ?? "", "", "YouTube Short Concept", brief.concept ?? "", "", "Key Beats", ...keyBeats.map((beat, i) => `${i + 1}. ${beat}`), "", "Thumbnail Direction", brief.thumbnail_direction ?? "", "", "Call to Action", brief.call_to_action ?? ""].join("\n");
   const href = URL.createObjectURL(new Blob([plainText], { type: "text/plain" }));
+  const actionPair = state.data.rows[state.selectedIndex]?.action_pair || "";
   $("brief-content").innerHTML = `
-    <div class="notice success">Active Strategy deployed for: ${escapeHtml(titleCase(state.data.rows[state.selectedIndex].action_pair))}</div>
+    <div class="notice success">Active Strategy deployed for: ${escapeHtml(titleCase(actionPair))}</div>
     <article class="brief-card">
       <h2>${escapeHtml(brief.title)}</h2>
       ${gap ? `<h4>Objective</h4><p>${escapeHtml(brief.objective)}</p><h4>Audience Insight</h4><p>${escapeHtml(brief.audience_insight)}</p><h4>Information Gap</h4><p><strong>Known:</strong> ${escapeHtml(gap.known)}<br><strong>Unknown:</strong> ${escapeHtml(gap.unknown)}<br><strong>Payoff:</strong> ${escapeHtml(gap.payoff)}</p>` : ""}
       <h4>Strategic Rationale</h4><p>${escapeHtml(brief.strategic_rationale)}</p>
       <div class="brief-meta"><div><strong>Audience:</strong> ${escapeHtml(brief.audience)}</div><div><strong>Tone:</strong> ${escapeHtml(brief.tone)}</div></div>
       <h4>Hook</h4><p>${escapeHtml(brief.hook)}</p>
-      ${gap ? `<h4>Alternative Hooks</h4><ul>${brief.hook_options.map((hook) => `<li>${escapeHtml(hook)}</li>`).join("")}</ul>` : ""}
+      ${gap ? `<h4>Alternative Hooks</h4><ul>${hookOptions.map((hook) => `<li>${escapeHtml(hook)}</li>`).join("")}</ul>` : ""}
       <h4>YouTube Short Concept</h4><p>${escapeHtml(brief.concept)}</p>
-      <h4>Key Beats</h4><ol>${brief.key_beats.map((beat) => `<li>${escapeHtml(beat)}</li>`).join("")}</ol>
+      <h4>Key Beats</h4><ol>${keyBeats.map((beat) => `<li>${escapeHtml(beat)}</li>`).join("")}</ol>
       <h4>Thumbnail Direction</h4><p>${escapeHtml(brief.thumbnail_direction)}</p>
       <h4>Call to Action</h4><p>${escapeHtml(brief.call_to_action)}</p>
-      ${gap ? `<h4>Product Role</h4><p>${escapeHtml(brief.product_role)}</p><h4>Success Metrics</h4><ul>${brief.success_metrics.map((metric) => `<li>${escapeHtml(metric)}</li>`).join("")}</ul><h4>Claims Guardrails</h4><p>${escapeHtml(brief.claims_guardrails)}</p>` : ""}
-      <a class="download-link" download="Dremel_Brief_${escapeHtml(state.data.rows[state.selectedIndex].action_pair.replaceAll(" ", "_"))}.txt" href="${href}">Download brief for marketing team</a>
+      ${gap ? `<h4>Product Role</h4><p>${escapeHtml(brief.product_role)}</p><h4>Success Metrics</h4><ul>${successMetrics.map((metric) => `<li>${escapeHtml(metric)}</li>`).join("")}</ul><h4>Claims Guardrails</h4><p>${escapeHtml(brief.claims_guardrails)}</p>` : ""}
+      <a class="download-link" download="Dremel_Brief_${escapeHtml(String(actionPair).replaceAll(" ", "_"))}.txt" href="${href}">Download brief for marketing team</a>
     </article>`;
 }
 
