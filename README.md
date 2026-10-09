@@ -7,19 +7,25 @@ The operating manual is [`AGENTS.md`](AGENTS.md).
 ## Architecture
 
 ```text
-Human
-  approves anything external
+Roxy (trigger and oversight)
+  tells Carl to start; monitors hq status; relays partial or stale
         |
         v
-Roxy (orchestrator)
-  hq collect / status / dashboard / publish --confirm
-        |                         |
-        | one-line handoff        | one-line handoff
-        v                         v
-Carl (analyst)              Maya (briefs)
-  hq candidates             hq evidence
-  hq evidence               hq brief
-  hq review
+Carl (collection and analysis)
+  hq status / collect / candidates / evidence / review
+        |
+        | approval handoff
+        v
+Maya (briefs)
+  hq evidence / hq brief
+        |
+        v
+Roxy
+  hq dashboard, asks the human, hq publish --confirm
+        |
+        v
+Human
+  approves anything external
         |
         v
 Python tools
@@ -70,7 +76,7 @@ Carl and Maya do not use `GEMINI_API_KEY`. Their judgment runs in the agent plat
 
 ## Commands
 
-Every command prints one JSON object to stdout and exits non-zero on error. `hq publish` without `--confirm` exits `2`.
+Every command ends with one JSON object on stdout and exits non-zero on error. Progress lines may appear before that object; parse the last JSON object. `hq publish` without `--confirm` exits `2`.
 
 ```bash
 python -m hq collect [--refresh | --reuse] [--fixture] [--max-age-hours 24]
