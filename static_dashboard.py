@@ -65,23 +65,7 @@ def build_static_dashboard(
     assets_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(logo_source, assets_dir / "dremel_logo.png")
 
-    candidate_ids = {row.get("video_id") for row in rows}
-    if not (
-        isinstance(brief, dict)
-        and brief.get("run_id") == run_context.get("run_id")
-        and brief.get("candidate_id") in candidate_ids
-    ):
-        brief = None
-    primary_ids = {row.get("video_id") for row in rows[:15]}
-    briefs = briefs if isinstance(briefs, dict) else {}
-    briefs = {
-        candidate_id: artifact
-        for candidate_id, artifact in briefs.items()
-        if candidate_id in primary_ids
-        and isinstance(artifact, dict)
-        and artifact.get("run_id") == run_context.get("run_id")
-        and artifact.get("candidate_id") == candidate_id
-    }
+    brief, briefs, approved_video_ids = _approved_briefs(rows, brief, briefs, run_context)
 
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +74,7 @@ def build_static_dashboard(
         "rows": rows,
         "maya_brief": brief,
         "maya_briefs": briefs,
+        "approved_video_ids": approved_video_ids,
     }
     (data_dir / "dashboard.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
@@ -97,6 +82,34 @@ def build_static_dashboard(
     )
     _stamp_dashboard_version(output_dir, run_context)
     return output_dir
+
+
+def _approved_briefs(rows, brief, briefs, run_context):
+    """Keep saved briefs that belong to this run, in ranked row order."""
+    candidate_ids = {row.get("video_id") for row in rows}
+    run_id = run_context.get("run_id") if isinstance(run_context, dict) else None
+
+    def accept(candidate_id, artifact):
+        return (
+            candidate_id in candidate_ids
+            and isinstance(artifact, dict)
+            and artifact.get("run_id") == run_id
+            and artifact.get("candidate_id") == candidate_id
+        )
+
+    accepted = {}
+    if isinstance(briefs, dict):
+        for candidate_id, artifact in briefs.items():
+            if accept(candidate_id, artifact):
+                accepted[candidate_id] = artifact
+    if isinstance(brief, dict) and accept(brief.get("candidate_id"), brief):
+        accepted.setdefault(brief.get("candidate_id"), brief)
+        legacy = brief
+    else:
+        legacy = None
+    approved_video_ids = [row.get("video_id") for row in rows if row.get("video_id") in accepted]
+    ordered = {video_id: accepted[video_id] for video_id in approved_video_ids}
+    return legacy, ordered, approved_video_ids
 
 
 def _stamp_dashboard_version(output_dir, run_context):

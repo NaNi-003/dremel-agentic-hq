@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,8 @@ def test_build_static_dashboard_preserves_original_sections(tmp_path):
     assert 'id="inventory" type="number"' in html
     assert 'id="inventory-warning"' in html
     assert "state.data.maya_briefs" in app_js
+    assert "approvedTrendEntries" in app_js
+    assert "No approved trends yet" in app_js
     assert "Open Maya brief" in app_js
     assert "Maya brief unavailable" in app_js
     assert "Request brief through Roxy" not in app_js
@@ -113,6 +116,7 @@ def test_build_static_dashboard_embeds_validated_run_data(tmp_path):
     assert payload["rows"] == ROWS
     assert payload["maya_brief"] == BRIEF
     assert payload["maya_briefs"] == {"video-1": BRIEF}
+    assert payload["approved_video_ids"] == ["video-1"]
 
 
 def test_build_static_dashboard_omits_mismatched_brief(tmp_path):
@@ -129,6 +133,7 @@ def test_build_static_dashboard_omits_mismatched_brief(tmp_path):
 
     payload = json.loads((output / "data" / "dashboard.json").read_text(encoding="utf-8"))
     assert payload["maya_brief"] is None
+    assert payload["approved_video_ids"] == []
 
 
 def test_build_static_dashboard_removes_unsafe_browser_values(tmp_path):
@@ -175,6 +180,60 @@ def test_build_static_dashboard_rejects_empty_data_without_destroying_last_build
         )
 
     assert marker.read_text(encoding="utf-8") == "keep"
+
+
+def _trend_row(video_id, action_pair, score):
+    return {
+        "video_id": video_id,
+        "video_title": action_pair,
+        "thumbnail_url": "https://example.com/thumb.jpg",
+        "action_pair": action_pair,
+        "velocity_score": score,
+        "cv_color_hex": "#846f5b",
+        "source_url": f"https://youtube.com/watch?v={video_id}",
+    }
+
+
+def _trend_brief(video_id):
+    return dict(BRIEF, candidate_id=video_id)
+
+
+def test_approved_video_ids_follow_rank_and_require_a_brief(tmp_path):
+    source = Path(__file__).parents[1] / "web_dashboard"
+    output = tmp_path / "site"
+    rows = [_trend_row(f"video-{index}", f"Trend {index}", 100 - index) for index in range(1, 17)]
+    briefs = {
+        "video-16": _trend_brief("video-16"),
+        "video-4": _trend_brief("video-4"),
+        "missing-video": _trend_brief("missing-video"),
+    }
+
+    build_static_dashboard(
+        output,
+        rows=rows,
+        brief=None,
+        briefs=briefs,
+        run_context={"run_id": "run-1"},
+        source_dir=source,
+    )
+
+    payload = json.loads((output / "data" / "dashboard.json").read_text(encoding="utf-8"))
+    assert payload["approved_video_ids"] == ["video-4", "video-16"]
+    assert list(payload["maya_briefs"]) == ["video-4", "video-16"]
+    assert payload["rows"][0]["video_id"] == "video-1"
+    assert len(payload["rows"]) == 16
+
+
+def test_dashboard_selection_uses_approved_trends():
+    root = Path(__file__).parents[1]
+    completed = subprocess.run(
+        ["node", str(root / "tests" / "dashboard_selection.test.js")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr + completed.stdout
 
 
 def test_dashboard_payload_exposes_collection_and_candidate_counts(tmp_path, monkeypatch):

@@ -16,7 +16,47 @@ async function loadDashboard() {
   renderAll();
 }
 
+function approvedTrendEntries(data) {
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const briefs = data.maya_briefs && typeof data.maya_briefs === "object" ? data.maya_briefs : {};
+  const legacy = data.maya_brief && typeof data.maya_brief === "object" ? data.maya_brief : null;
+  const hasBrief = (id) => {
+    const saved = briefs[id];
+    if (saved && saved.candidate_id === id) return true;
+    return Boolean(legacy && legacy.candidate_id === id);
+  };
+  const listed = Array.isArray(data.approved_video_ids)
+    ? data.approved_video_ids
+    : rows.map((row) => row && row.video_id).filter(hasBrief);
+  const byId = new Map();
+  rows.forEach((row, index) => {
+    if (row && row.video_id != null && !byId.has(row.video_id)) byId.set(row.video_id, { row, index });
+  });
+  const seen = new Set();
+  const entries = [];
+  listed.forEach((id) => {
+    if (seen.has(id) || !hasBrief(id)) return;
+    const entry = byId.get(id);
+    if (!entry) return;
+    seen.add(id);
+    entries.push(entry);
+  });
+  return entries;
+}
+
+function dashboardSelection(data) {
+  const approved = approvedTrendEntries(data);
+  const top = Array.isArray(data.rows) ? data.rows[0] : null;
+  return {
+    selectedIndex: approved.length ? approved[0].index : -1,
+    approvedIds: approved.map((item) => item.row.video_id),
+    topTrendLabel: approved.length ? titleCase(approved[0].row.action_pair) : "No approved trends yet",
+    peakVelocity: top ? top.velocity_score : null,
+  };
+}
+
 function renderAll() {
+  state.selectedIndex = dashboardSelection(state.data).selectedIndex;
   renderRun();
   populateSelectors();
   renderKpis();
@@ -41,14 +81,23 @@ function renderRun() {
 }
 
 function populateSelectors() {
-  const primaryOptions = state.data.rows.slice(0, 15).map((row, index) => `<option value="${index}">${escapeHtml(row.action_pair)}</option>`).join("");
-  const allOptions = state.data.rows.map((row, index) => `<option value="${index}">${escapeHtml(row.action_pair)}</option>`).join("");
-  $("trend-select").innerHTML = primaryOptions;
-  $("roi-trend").innerHTML = allOptions;
+  const approved = approvedTrendEntries(state.data);
+  const options = approved.map(({ row, index }) => `<option value="${index}">${escapeHtml(row.action_pair)}</option>`).join("");
+  const empty = '<option value="" disabled selected>No approved trends yet</option>';
+  $("trend-select").innerHTML = options || empty;
+  $("roi-trend").innerHTML = options || empty;
+  if (options) {
+    const value = String(state.selectedIndex);
+    $("trend-select").value = value;
+    $("roi-trend").value = value;
+  }
   $("trend-select").addEventListener("change", (event) => {
-    state.selectedIndex = Number(event.target.value);
+    const index = Number(event.target.value);
+    if (!approvedTrendEntries(state.data).some((item) => item.index === index)) return;
+    state.selectedIndex = index;
     state.briefOpen = false;
     renderBrief();
+    renderChart();
   });
   $("brief-button").addEventListener("click", () => {
     const artifact = matchingBrief();
@@ -61,8 +110,9 @@ function populateSelectors() {
 
 function renderKpis() {
   const top = state.data.rows[0];
+  const selection = dashboardSelection(state.data);
   const items = [
-    ["Top Emerging Trend", titleCase(top.action_pair), ""],
+    ["Top Emerging Trend", selection.topTrendLabel, ""],
     ["Peak Velocity", `${top.velocity_score} V/d`, "Age-adjusted"],
     ["Videos Assessed", number(state.data.run?.videos_collected) || state.data.rows.length, ""],
     ["Ranked Opportunities", number(state.data.run?.candidates_scored) || state.data.rows.length, ""],
@@ -73,7 +123,9 @@ function renderKpis() {
 }
 
 function matchingBrief() {
+  if (state.selectedIndex < 0) return null;
   const selected = state.data.rows[state.selectedIndex];
+  if (!selected) return null;
   const briefs = state.data.maya_briefs || {};
   const saved = briefs[selected.video_id];
   if (saved && saved.candidate_id === selected.video_id) return saved;
@@ -82,6 +134,14 @@ function matchingBrief() {
 }
 
 function renderBrief() {
+  if (state.selectedIndex < 0 || !approvedTrendEntries(state.data).length) {
+    const button = $("brief-button");
+    button.disabled = true;
+    button.textContent = "Maya brief unavailable";
+    button.title = "No validated Maya brief is available";
+    $("brief-content").innerHTML = '<div class="notice info">No approved trends yet</div>';
+    return;
+  }
   const artifact = matchingBrief();
   const button = $("brief-button");
   button.disabled = !artifact;
@@ -176,7 +236,7 @@ function bindChartInteractions() {
     point.addEventListener("blur", hide);
     point.addEventListener("click", () => {
       const index = number(point.dataset.index);
-      if (index >= 15) return;
+      if (!approvedTrendEntries(state.data).some((item) => item.index === index)) return;
       state.selectedIndex = index;
       state.briefOpen = false;
       $("trend-select").value = String(index);
@@ -267,7 +327,15 @@ function bindRoi() {
 function updateRoi() {
   const values = Object.fromEntries(["views", "cpm", "fixed", "ctr", "cvr", "price", "margin", "discount", "inventory"].map((id) => [id, number($(id).value)]));
   [["views", fmt.format(values.views)], ["cpm", `£${values.cpm}`], ["fixed", `£${values.fixed}`], ["ctr", `${values.ctr.toFixed(1)}%`], ["cvr", `${values.cvr.toFixed(1)}%`], ["price", `£${values.price}`], ["margin", `£${values.margin}`], ["discount", `${values.discount}%`]].forEach(([id, value]) => $(`${id}-output`).textContent = value);
-  const trend = state.data.rows[number($("roi-trend").value)];
+  const trendIndex = Number($("roi-trend").value);
+  const trend = approvedTrendEntries(state.data).find((item) => item.index === trendIndex)?.row;
+  if (!trend) {
+    $("roi-kpis").innerHTML = "";
+    $("inventory-warning").classList.add("hidden");
+    $("inventory-warning").textContent = "";
+    $("roi-takeaway").textContent = "No approved trends yet";
+    return;
+  }
   const maxVelocity = Math.max(...state.data.rows.map((row) => number(row.velocity_score)), 1);
   const campaignCost = values.views / 1000 * values.cpm + values.fixed;
   const finalCtr = values.ctr + number(trend.velocity_score) / maxVelocity * 1.5;
