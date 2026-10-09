@@ -363,6 +363,7 @@ def test_partial_collection_is_reported(tmp_path, capsys):
         ),
     )
     assert result.status == "partial"
+    capsys.readouterr()
     code, payload = invoke(["status", "--runs-root", str(runs)], capsys)
     assert code == 0
     assert payload["collection_status"] == "partial"
@@ -381,7 +382,7 @@ def test_invalid_run_id_and_json_object_are_rejected(tmp_path, capsys):
     array_path.write_text("[]", encoding="utf-8")
     code, payload = invoke(["review", "--runs-root", str(runs), "--input", str(array_path)], capsys)
     assert code == 1
-    assert "JSON object" in payload["error"]
+    assert "must be an object" in payload["error"]
 
 
 def _approve_and_brief(runs, tmp_path, capsys):
